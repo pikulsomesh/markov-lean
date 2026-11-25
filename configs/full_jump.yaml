@@ -1,0 +1,58 @@
+# Full-scale analysis with the giant-state fix (docs/giant_state.md): the typed featurizer view and
+# the jump-chain MSM. Otherwise identical to configs/full.yaml. Run:  markov-lean full --config configs/full_jump.yaml --out results/full_jump
+# Rerun only the projection against the saved model (for example once the search has found proofs):
+#   markov-lean project --msm results/full/msm --out results/full/project \
+#       --dataset name=path/to/steps.parquet
+# No step makes an API call. Outputs are described in results/README.md.
+data:
+  processed_dir: data/processed
+  train: leandojo_train     # data/processed/leandojo_train.parquet (all of LeanDojo Benchmark 4 random/train)
+  min_steps: 8              # as in the pilot; --min-steps 2 fits on every multi-step proof instead
+  max_steps: null
+  max_proofs: null          # null: every proof that passes min_steps
+  seed: 0
+
+features:
+  fit_proofs: 20000         # the featurizer's vocabulary and SVD are fit on this many random proofs
+  batch_rows: 50000         # rows read from parquet at a time
+  chunk_rows: 5000          # rows per worker task
+  n_jobs: 6                 # worker processes for featurizing (Mac Mini M2: 4 performance + 4 efficiency cores)
+
+msm:                        # any field of markov_lean.msm.MSMConfig; these match configs/pilot.yaml
+  featurizer: tfidf_svd
+  featurizer_kwargs: {n_components: 128, view: typed}   # hypothesis types and goals, no binder names (docs/giant_state.md)
+  n_microstates: 100        # fixed: on the jump chain, cross-validated VAMP-2 keeps rising with k (3.1, 4.0, 6.2 at 100, 200, 400)
+                            # because finer microstates turn more within-proof dwell into jumps; 100 is what the step-level CV picked
+  lag: 1                    # the lag the pilot's timescale check picked; fixed here
+  n_macrostates: 10         # preregistered, as in the pilot
+  jump_chain: true          # count changes of microstate only, so one sticky microstate cannot be a macrostate
+  max_macrostates: 12
+  error_samples: 100        # bootstrap over proofs for the timescale error bars
+  kmeans_batch_size: 4096
+
+project:
+  bootstrap: 1000           # resamples of whole proofs for every interval
+  level: 0.95
+  seed: 0
+  lag: null                 # null: the model's lag
+  reference: leandojo_test  # differences.parquet is each dataset minus this one
+  train_name: leandojo_train   # in-sample statistics from the fit itself
+  datasets:
+    # held-out LeanDojo proofs: real trajectories, same length filter as the fit, then every multi-step proof
+    - {name: leandojo_val, path: data/processed/leandojo_val.parquet, min_steps: 8}
+    - {name: leandojo_test, path: data/processed/leandojo_test.parquet, min_steps: 8}
+    - {name: leandojo_test_all, path: data/processed/leandojo_test.parquet, min_steps: 2}
+    # the training proofs the fit left out (2 to 7 steps), placed on the same model
+    - {name: leandojo_train_short, path: data/processed/leandojo_train.parquet, min_steps: 2, max_steps: 7}
+    # benchmarks: the processed files hold one goal state per theorem, so these give occupancy only
+    - {name: minif2f_val, path: data/processed/minif2f_val.parquet}
+    - {name: minif2f_test, path: data/processed/minif2f_test.parquet}
+    - {name: proofnet_val, path: data/processed/proofnet_val.parquet}
+    - {name: proofnet_test, path: data/processed/proofnet_test.parquet}
+    - {name: putnam, path: data/processed/putnam_test.parquet}
+    - {name: workbook, path: data/processed/workbook_train.parquet}
+    - {name: workbook_statements, path: data/processed/workbook_statements_train.parquet}
+    # proofs found by `markov-lean search-eval` (every condition and seed), when they exist: real benchmark
+    # trajectories. Skipped until the runs are synced to results/search_eval/.
+    - {name: minif2f_search, path: "results/search_eval/minif2f/*/*/steps.parquet", min_steps: 2}
+    - {name: putnam_search, path: "results/search_eval/putnam/*/*/steps.parquet", min_steps: 2}

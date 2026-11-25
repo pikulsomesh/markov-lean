@@ -97,6 +97,13 @@ class MSMConfig:
     ck_tol: float = 0.10
     kmeans_batch_size: int = 2048
     kmeans_n_init: int = 3
+    # how k-means weights goal states: "step" (every step counts once) or "proof" (each proof
+    # counts once, so a step weighs 1 / proof length and long proofs can't claim microstates)
+    kmeans_weight: str = "step"
+    # count the embedded jump chain: collapse runs of one microstate within a proof, so only
+    # changes of microstate are transitions and time (lag, timescales) is counted in microstate
+    # jumps.  A single microstate then can't be metastable just because proofs dwell in it.
+    jump_chain: bool = False
     seed: int = 0
 
 
@@ -166,13 +173,31 @@ def sort_steps(steps: pd.DataFrame, time_col: str = "step") -> pd.DataFrame:
 
 
 def cluster_microstates(X: np.ndarray, n_microstates: int, seed: int = 0,
-                        batch_size: int = 2048, n_init: int = 3) -> MiniBatchKMeans:
+                        batch_size: int = 2048, n_init: int = 3,
+                        sample_weight: np.ndarray | None = None) -> MiniBatchKMeans:
     k = min(n_microstates, len(X))
-    return MiniBatchKMeans(n_clusters=k, random_state=seed, batch_size=batch_size, n_init=n_init).fit(X)
+    km = MiniBatchKMeans(n_clusters=k, random_state=seed, batch_size=batch_size, n_init=n_init)
+    return km.fit(X, sample_weight=sample_weight)
+
+
+def step_weights(codes: np.ndarray, mode: str = "step") -> np.ndarray | None:
+    """k-means sample weights: None for ``"step"``, 1 / proof length for ``"proof"`` (mean 1)."""
+    if mode == "step":
+        return None
+    if mode != "proof":
+        raise ValueError("kmeans_weight must be 'step' or 'proof'")
+    lens = np.bincount(codes)
+    w = 1.0 / lens[codes]
+    return w * (len(w) / w.sum())
 
 
 def proof_codes(sorted_steps: pd.DataFrame) -> np.ndarray:
     return pd.factorize(sorted_steps["proof_id"], sort=False)[0]
+
+
+def collapse_repeats(dtrajs: list[np.ndarray]) -> list[np.ndarray]:
+    """Each trajectory with runs of the same state collapsed to one entry (the jump chain)."""
+    return [d[np.r_[True, d[1:] != d[:-1]]] if len(d) else d for d in dtrajs]
 
 
 def split_trajectories(sorted_steps: pd.DataFrame, labels: np.ndarray) -> list[np.ndarray]:
@@ -212,7 +237,8 @@ def pick_n_macrostates(msm: MarkovStateModel, max_k: int = 12) -> int:
 
 
 def select_n_microstates(X: np.ndarray, codes: np.ndarray, candidates: list[int], lag: int, dim: int,
-                         folds: int, seed: int, reversible: bool = True, **km) -> tuple[int, pd.DataFrame]:
+                         folds: int, seed: int, reversible: bool = True, weights: np.ndarray | None = None,
+                         jump_chain: bool = False, **km) -> tuple[int, pd.DataFrame]:
     """Cross-validated VAMP-2 over held-out proofs; returns (best k, per-fold scores).
 
     Proofs, not steps, are split into folds, so a test proof is never seen in
@@ -229,9 +255,11 @@ def select_n_microstates(X: np.ndarray, codes: np.ndarray, candidates: list[int]
             continue
         for f in range(folds):
             tr, te = row_fold != f, row_fold == f
-            model = cluster_microstates(X[tr], k, seed, **km)
+            model = cluster_microstates(X[tr], k, seed, sample_weight=None if weights is None else weights[tr], **km)
             d_tr = np.split(model.labels_.astype(np.int64), np.flatnonzero(np.diff(codes[tr])) + 1)
             d_te = np.split(model.predict(X[te]).astype(np.int64), np.flatnonzero(np.diff(codes[te])) + 1)
+            if jump_chain:
+                d_tr, d_te = collapse_repeats(d_tr), collapse_repeats(d_te)
             try:
                 msm, _ = estimate_msm(d_tr, lag, model.n_clusters, reversible)
                 s = float(msm.score([d for d in d_te if len(d) > lag], r=2, dim=min(dim, msm.n_states)))
@@ -407,19 +435,26 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None, *,
 
     # 2-3. microstates
     km = {"batch_size": cfg.kmeans_batch_size, "n_init": cfg.kmeans_n_init}
+    weights = step_weights(codes, cfg.kmeans_weight)
     if isinstance(cfg.n_microstates, int):
         n_micro_req, cv = cfg.n_microstates, pd.DataFrame(columns=["n_microstates", "fold", "vamp2"])
         micro_by = "config"
     else:
         n_micro_req, cv = select_n_microstates(
             X, codes, list(cfg.n_microstates), cfg.cv_lag, cfg.max_macrostates + 1,
-            cfg.cv_folds, cfg.seed, cfg.reversible, **km)
+            cfg.cv_folds, cfg.seed, cfg.reversible, weights=weights,
+            jump_chain=cfg.jump_chain, **km)
         micro_by = "vamp2_cv"
-    kmeans = cluster_microstates(X, n_micro_req, cfg.seed, **km)
+    kmeans = cluster_microstates(X, n_micro_req, cfg.seed, sample_weight=weights, **km)
     micro = kmeans.labels_.astype(np.int64)
     centers = kmeans.cluster_centers_
     n_micro = centers.shape[0]
     dtrajs = split_trajectories(df, micro)
+    if cfg.jump_chain:
+        dtrajs = collapse_repeats(dtrajs)
+    traj_lens = np.array([len(d) for d in dtrajs])
+    median_traj = float(np.median(traj_lens))
+    unit = "microstate jumps" if cfg.jump_chain else TIME_UNIT
     t_clust = time.perf_counter()
 
     # 4-6. implied timescales over lags, then the lag
@@ -429,7 +464,7 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None, *,
         raise ValueError("no lag could be estimated; proofs are too short")
     first = models[min(models)]
     n_macro_prelim = cfg.n_macrostates or pick_n_macrostates(first, cfg.max_macrostates)
-    max_lag = max(1, int(cfg.max_lag_fraction * median_len // max(cfg.ck_mlags, 1)))
+    max_lag = max(1, int(cfg.max_lag_fraction * median_traj // max(cfg.ck_mlags, 1)))
     if cfg.lag == "auto":
         lag, its_converged = choose_lag(its, max(n_macro_prelim - 1, 1), cfg.its_tol, max_lag)
         lag_by = "its_convergence"
@@ -478,7 +513,7 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None, *,
     visits = np.bincount(micro, minlength=n_micro)[connected]
     sparse_frac = float((visits < cfg.min_visits).mean())
     kept_frac = float(msm.count_model.count_matrix.sum() / max(counts.count_matrix.sum(), 1))
-    proofs_long = float((lens > lag * cfg.ck_mlags).mean())
+    proofs_long = float((traj_lens > lag * cfg.ck_mlags).mean())
     gap_ratio = float(ts[n_slow - 1] / ts[n_slow]) if len(ts) > n_slow else float("nan")
     mean_membership = float(np.nanmean(assignments["membership"]))
     rel = its_relative_change(its, n_slow)
@@ -491,7 +526,7 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None, *,
                            f"fraction of kept microstates visited fewer than {cfg.min_visits} times"),
         "lag_vs_proof_length": _check(proofs_long >= 0.5, proofs_long, 0.5,
                                       f"fraction of proofs longer than {cfg.ck_mlags} x lag = "
-                                      f"{lag * cfg.ck_mlags} steps (median length {median_len:g})"),
+                                      f"{lag * cfg.ck_mlags} {unit} (median length {median_traj:g})"),
         "its_converged": _check(its_converged, rel_at_lag, cfg.its_tol,
                                 f"max relative change of the {n_slow} slowest timescales from lag {lag} to the next lag"),
         "timescales_resolved": _check(bool(len(ts) >= n_slow and ts[n_slow - 1] > lag),
@@ -517,12 +552,14 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None, *,
             f"share of the slow timescales at the next lag inside the 95% {bayes['method']} interval at the chosen lag")
 
     report = {
-        "time_unit": TIME_UNIT,
+        "time_unit": unit,
         "time_col": cfg.time_col,
         "config": asdict(cfg),
         "n_steps": int(len(df)),
         "n_proofs": int(len(lens)),
         "proof_length": {"min": int(lens.min()), "median": median_len, "max": int(lens.max())},
+        "trajectory_length": {"unit": unit, "median": median_traj,
+                              "fraction_one_state": float((traj_lens <= 1).mean())},
         "feature_dim": int(X.shape[1]),
         "n_microstates": int(n_micro),
         "n_microstates_chosen_by": micro_by,
