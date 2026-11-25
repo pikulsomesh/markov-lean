@@ -1,0 +1,76 @@
+% markov-lean paper. Target: ICML 2027 (abstracts Jan 14, full papers Jan 22, 2027).
+% Builds with the official ICML style when icml2027.sty / icml2027.bst sit in
+% this folder, and falls back to the article class otherwise (see README.md).
+\documentclass{article}
+
+\newif\ificmlstyle
+\IfFileExists{icml2027.sty}{\icmlstyletrue}{\icmlstylefalse}
+
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\ificmlstyle
+  % Submission (anonymous) by default. Use [accepted] for the camera-ready.
+  \usepackage{icml2027}
+\else
+  \usepackage[margin=1in]{geometry}
+  \usepackage[round,authoryear]{natbib}
+\fi
+
+\input{macros}
+
+\newcommand{\papertitle}{Do Lean Proofs Move Between Areas of Mathematics? Markov State Models over Proof Trajectories}
+
+\ificmlstyle
+  \icmltitlerunning{Markov State Models over Lean Proof Trajectories}
+\fi
+
+\begin{document}
+
+\ificmlstyle
+  \twocolumn[
+    \icmltitle{\papertitle}
+    \begin{icmlauthorlist}
+      \icmlauthor{Somesh Mohapatra}{ind}
+    \end{icmlauthorlist}
+    \icmlaffiliation{ind}{Independent researcher}
+    % TODO: correspondence address for the camera-ready.
+    \icmlcorrespondingauthor{Somesh Mohapatra}{TODO}
+    \icmlkeywords{theorem proving, Lean, Markov state models, proof search}
+    \vskip 0.3in
+  ]
+  \printAffiliationsAndNotice{}
+\else
+  \title{\papertitle}
+  \author{Somesh Mohapatra\\Independent researcher}
+  \date{Draft, \today}
+  \maketitle
+\fi
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\input{sections/intro}
+\input{sections/related}
+\input{sections/method}
+\input{sections/experiments}
+\input{sections/search}
+\input{sections/discussion}
+
+\bibliography{refs}
+\ificmlstyle
+  \bibliographystyle{icml2027}
+\else
+  \bibliographystyle{plainnat}
+\fi
+
+\clearpage
+\appendix
+\input{sections/appendix}
+
+\end{document}
