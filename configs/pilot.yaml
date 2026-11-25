@@ -1,17 +1,24 @@
-# Phase 2 pilot: does a Markov state model over goal states find areas that match MSC labels?
+# Phase 2 pilot: do Markov-model macrostates over goal states line up with MSC areas?
+# Run: markov-lean pilot --out results/pilot
+# The first run fits the model and writes the judge sample (no API calls).
+# After the judges' labels are in results/pilot/judge/labels.parquet, the same command scores and makes the gate 1 call.
 data:
-  source: leandojo
+  source: leandojo          # leandojo | workbook | synthetic
   split: train
-  max_proofs: 20000        # keeps the run within the Mac Mini's 16 GB
-featurize:
-  method: tfidf_svd
-  svd_dim: 128
-msm:
-  n_microstates: 200
-  lag: 1
-  n_macrostates: [6, 8, 12]  # compared by implied timescales gap
+  processed_dir: data/processed
+  max_proofs: 20000         # keeps the run within the Mac Mini's 16 GB
+  min_steps: 2              # a proof needs a transition to count
+  seed: 0
+msm:                        # any field of markov_lean.msm.MSMConfig
+  featurizer: tfidf_svd
+  featurizer_kwargs: {n_components: 128}
+  n_microstates: [100, 200, 400]   # picked by cross-validated VAMP-2
+  lag: auto                 # picked by implied-timescale convergence
+  max_macrostates: 12       # number of areas picked by the spectral gap, up to this
+  bayesian_samples: 50
 judge:
-  sample_proofs: 1000      # labeled by both judges for NMI/ARI
+  config: configs/judge.yaml
+  sample_proofs: 1000       # labelled by both judges; NMI/ARI uses their consensus
 eval:
-  baselines: [folder]
-  gate_nmi: 0.15           # gate 1: go to search phase only if macrostates beat the folder baseline and clear this
+  topk: [1, 3]
+  gate_nmi: 0.15            # gate 1: macrostates must clear this and beat the Mathlib-folder baseline
