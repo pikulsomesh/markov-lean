@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# raw downloads stay on the machine that fetched them
+data/raw/
+data/cache/
+# Lean build output
+lean/.lake/
+# secrets
+.env
+*.key
