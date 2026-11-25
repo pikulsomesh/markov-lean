@@ -1,0 +1,34 @@
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Data}
+\todo{sources and sizes from docs/data_card.md: LeanDojo Benchmark 4, Lean Workbook, miniF2F, ProofNet, PutnamBench; a synthetic set with known areas as a sanity check.}
+
+\subsection{Is the model Markovian?}
+
+\begin{figure}[t]
+  \centering
+  \maybefigure{implied_timescales}{0.48\linewidth}\hfill
+  \maybefigure{transition_matrix}{0.48\linewidth}
+  \caption{\todo{Left: implied timescales against lag in proof steps; the gray region is where a process is faster than the lag. Right: macrostate transition matrix.}}
+  \label{fig:its}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \maybefigure{chapman_kolmogorov}{0.9\linewidth}
+  \caption{\todo{Chapman--Kolmogorov test: model prediction $\T(\lag)^k$ against direct estimates of $\T(k\lag)$.}}
+  \label{fig:ck}
+\end{figure}
+
+\subsection{Do macrostates match areas?}
+
+\begin{figure}[t]
+  \centering
+  \maybefigure{judge_confusion}{0.48\linewidth}\hfill
+  \maybefigure{area_flow}{0.48\linewidth}
+  \caption{\todo{Left: macrostates against judge MSC codes, with NMI. Right: the largest flows between areas within proofs.}}
+  \label{fig:areas}
+\end{figure}
+
+\todo{results.}

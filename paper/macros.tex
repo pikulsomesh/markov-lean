@@ -1,0 +1,11 @@
+% Shared notation.
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\lag}{\tau}
+\providecommand{\T}{}\renewcommand{\T}{\mathbf{T}}
+\newcommand{\msc}[1]{\textsc{msc}~#1}
+\newcommand{\state}{s}
+% Include a figure from figures/ if it has been rendered, else a labelled box.
+\newcommand{\maybefigure}[2]{%
+  \IfFileExists{figures/#1.pdf}%
+    {\includegraphics[width=#2]{figures/#1.pdf}}%
+    {\fbox{\parbox[c][0.45\linewidth][c]{#2}{\centering\small figures/#1.pdf\\not rendered yet}}}}

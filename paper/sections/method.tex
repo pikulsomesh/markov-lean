@@ -1,0 +1,23 @@
+\section{Method}
+\label{sec:method}
+
+\subsection{Proofs as trajectories}
+% Data contract: docs/schema.md, table `steps`.
+Each proof is a sequence of goal states $\state_0, \state_1, \dots, \state_n$,
+where $\state_t$ is the pretty-printed goal before tactic $t$.
+\todo{featurizer: how goal states become vectors.}
+
+\subsection{Microstates and the transition matrix}
+% Table `assignments`, column `microstate`.
+\todo{k-means microstates; count matrix at lag $\lag$ steps; reversible maximum-likelihood estimate of $\T(\lag)$.}
+
+\subsection{Metastable areas}
+% Table `assignments`, columns `macrostate`, `membership`.
+\todo{PCCA+ on the leading eigenvectors; choosing the number of macrostates from the implied-timescale gap.}
+
+\subsection{Validation}
+\todo{implied timescales $t_i(\lag) = -\lag / \ln|\lambda_i(\lag)|$ against lag; Chapman--Kolmogorov test $\T(\lag)^k \approx \T(k\lag)$ \citep{prinz2011markov}.}
+
+\subsection{LLM judges}
+% Table `labels`.
+\todo{two judges assign a two-digit MSC 2020 code \citep{msc2020} per step and per proof; agreement between judges; NMI between macrostates and judge labels.}
