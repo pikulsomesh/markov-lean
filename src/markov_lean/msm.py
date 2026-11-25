@@ -45,9 +45,11 @@ deeptime calls used (checked against deeptime 0.5.0):
 from __future__ import annotations
 
 import json
+import pickle
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -111,6 +113,8 @@ class MSMResult:
     ck: pd.DataFrame                   # lag, from_set, to_set, predicted, estimated
     microstate_cv: pd.DataFrame        # n_microstates, fold, vamp2
     report: dict
+    featurizer: Any = None             # the fitted featurizer, so new goal states can be placed (area prior)
+    memberships: np.ndarray | None = None  # PCCA+ memberships, (n_microstates, n_macrostates), NaN rows outside the connected set
 
     @property
     def lag(self) -> int:
@@ -129,6 +133,15 @@ class MSMResult:
         self.microstate_cv.to_csv(out / "microstate_cv.csv", index=False)
         np.save(out / "coarse_T.npy", self.coarse_T)
         np.save(out / "micro_T.npy", self.msm.transition_matrix)
+        # what the search's area prior needs to place a new goal state (markov_lean.prior_loader)
+        np.save(out / "centers.npy", self.centers)
+        np.save(out / "connected.npy", self.connected)
+        np.save(out / "micro_to_macro.npy", self.micro_to_macro)
+        if self.memberships is not None:
+            np.save(out / "memberships.npy", self.memberships)
+        if self.featurizer is not None:
+            with open(out / "featurizer.pkl", "wb") as f:
+                pickle.dump(self.featurizer, f)
         (out / "msm_report.json").write_text(json.dumps(self.report, indent=2, default=_jsonable))
 
 
@@ -376,7 +389,8 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None) -> MSMResult:
     fkw = dict(cfg.featurizer_kwargs)
     if cfg.featurizer == "tfidf_svd":
         fkw.setdefault("seed", cfg.seed)
-    X = make_featurizer(cfg.featurizer, **fkw).fit_transform(texts)
+    featurizer = make_featurizer(cfg.featurizer, **fkw)
+    X = featurizer.fit_transform(texts)
     t_feat = time.perf_counter()
 
     # 2-3. microstates
@@ -528,8 +542,11 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None) -> MSMResult:
             "validation": round(t_val - t_msm, 3),
         },
     }
+    full_memberships = np.full((n_micro, n_macro), np.nan)
+    full_memberships[connected] = np.asarray(pcca.memberships)
     return MSMResult(
         assignments=assignments, msm=msm, microstates=micro, centers=centers, connected=connected,
         micro_to_macro=micro_to_macro, coarse_T=np.real(np.asarray(pcca.coarse_grained_transition_matrix)),
         timescales=its, ck=ck, microstate_cv=cv, report=report,
+        featurizer=featurizer, memberships=full_memberships,
     )
