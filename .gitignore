@@ -25,3 +25,6 @@ paper/sections/*.aux
 
 # results explorer output (markov-lean explore)
 site/
+
+# dataset release folder (make release); uploaded by hand, never committed
+release/

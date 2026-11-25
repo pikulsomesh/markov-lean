@@ -1,0 +1,21 @@
+# The synthetic sanity check (planted areas) for the paper's area table.
+# Run: markov-lean pilot --config configs/pilot_synthetic.yaml --out results/pilot_synthetic
+# Offline and free: the hidden true_area stands in for the judge labels, so one pass scores and calls the gate.
+data:
+  source: synthetic
+  synthetic: {n_proofs: 400, min_steps: 8, max_steps: 30, p_stay: 0.85, noise: 0.45, seed: 0}
+  max_proofs: null
+  min_steps: 8
+  seed: 0
+msm:                        # as configs/pilot.yaml, with the planted number of areas
+  featurizer: tfidf_svd
+  featurizer_kwargs: {n_components: 64}
+  n_microstates: [25, 50, 100]
+  lag: auto
+  n_macrostates: 6          # the generator plants 6 areas
+  max_macrostates: 12
+  error_samples: 50
+eval:
+  topk: [1, 3]
+  macrostate_sweep: [2, 4, 6, 8, 10, 12]
+  gate_nmi: 0.15
