@@ -165,7 +165,7 @@ def test_every_input_fills_figures_tables_and_numbers(tmp_path, paper_dir):
     assert "8{,}423 & 101{,}234" in data and "200 & 3{,}000" in data
     assert re.search(r"PutnamBench\s+& 8 ", data)  # counted from the search runs
     areas = (figs / "table_areas.tex").read_text()
-    assert "($m = 3$)" in areas and "0.31 & 0.20" in areas and "0.87 & 0.80" in areas
+    assert "($m = 3$)" in areas and r"0.31 & \tbd & 0.20" in areas and "0.87 & -- & 0.80" in areas
     search = (figs / "table_search.tex").read_text()
     assert "miniF2F & PutnamBench" in search
     lines = [ln for ln in search.splitlines() if "&" in ln and "Prior" not in ln]
@@ -287,3 +287,119 @@ def test_real_synthetic_pilot_feeds_the_paper(tmp_path, paper_dir):
     assert items[("figure", "chapman_kolmogorov")] == "real"
     assert items[("number", "resSyntheticNMI")] == "real"
     assert items[("number", "resMacroNMI")] == "preview"  # synthetic labels never stand in for the judges
+
+
+# --------------------------------------------------------------------------- table 2 baselines
+
+
+def _write_robustness_full(rob: Path) -> None:
+    """What `markov-lean robustness` writes: every grouping with AMI and intervals, and the permutation nulls."""
+    rob.mkdir(parents=True, exist_ok=True)
+    rows = [("macrostate", 0.312, 0.21, 0.205), ("microstate", 0.40, 0.18, 0.06), ("folder", 0.11, 0.09, 0.05),
+            ("folder2", 0.15, 0.10, 0.04), ("namespace", 0.13, 0.08, 0.03), ("namespace2", 0.17, 0.07, 0.02),
+            ("kmeans_steps", 0.24, 0.16, 0.12), ("kmeans_microstates", 0.26, 0.17, 0.13),
+            ("proof_label", 0.70, 0.66, 0.61), ("random", 0.004, -0.001, -0.002)]
+    t = pd.DataFrame(rows, columns=["grouping", "nmi", "ami", "ari"])
+    t["n_groups"] = 3
+    t["nmi_lo"], t["nmi_hi"] = t["nmi"] - 0.02, t["nmi"] + 0.03
+    t["ari_lo"], t["ari_hi"] = t["ari"] - 0.01, t["ari"] + 0.01
+    t.to_csv(rob / "baselines.csv", index=False)
+    (rob / "robustness.json").write_text(json.dumps({
+        "judge_ceiling": {"nmi": 0.55, "kappa": 0.6},
+        "baselines": {"null": {
+            "observed": {"nmi": 0.312, "ari": 0.205}, "n_permutations": 1000,
+            "row": {"nmi_mean": 0.0021, "nmi_q95": 0.004, "p_nmi": 0.000999, "ari_mean": 0.0001, "p_ari": 0.000999},
+            "proof": {"nmi_mean": 0.081, "nmi_q95": 0.1, "p_nmi": 0.012, "ari_mean": 0.031, "p_ari": 0.02},
+        }}}))
+
+
+def _write_significance(d: Path) -> None:
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "significance.json").write_text(json.dumps({
+        "partitions": {"msm": {"nmi": {"value": 0.3141, "ci95": [0.28, 0.35]},
+                               "ari": {"value": 0.2, "ci95": [0.17, 0.23]}},
+                       "folder": {"nmi": {"value": 0.11, "ci95": [0.09, 0.13]},
+                                  "ari": {"value": 0.05, "ci95": [0.04, 0.06]}}},
+        "shuffle_nulls": {"msm": {"nmi": 0.3141,
+                                  "within_proof": {"null_mean": 0.29, "null_sd": 0.01, "z": 2.4, "p": 0.034},
+                                  "global": {"null_mean": 0.003, "null_sd": 0.001, "z": 300.0, "p": 0.001}}},
+    }))
+
+
+def _ci(v: str, interval: str) -> str:
+    return r"\begin{tabular}[t]{@{}c@{}}" + v + r"\\[-1pt]{\scriptsize[" + interval + r"]}\end{tabular}"
+
+
+def _area_rows(path: Path) -> dict[str, list[str]]:
+    out = {}
+    for line in path.read_text().splitlines():
+        if "&" in line and "multicolumn" not in line and "Labeling" not in line:
+            cells = [c.strip() for c in line.rstrip("\\ ").split("&")]
+            out[cells[0]] = cells[1:]
+    return out
+
+
+def test_table_areas_lists_every_robustness_baseline_and_null(tmp_path, paper_dir):
+    results = make_results(tmp_path / "results", search=False)
+    _write_robustness_full(results / "pilot3" / "robustness")
+    _write_significance(results / "pilot3" / "significance")
+    assert P.discover(results).significance == results / "pilot3" / "significance"
+    P.run(results, paper_dir, verbose=False)
+    figs = paper_dir / "figures"
+    rows = _area_rows(figs / "table_areas.tex")
+    # the macrostates come from the robustness table (same steps as every baseline), with its intervals
+    assert rows["Macrostates ($m = 3$)"] == [_ci("0.31", "0.29, 0.34"), "0.21",
+                                              _ci("0.20", "0.19, 0.21")]
+    assert rows["Mathlib folder"][0] == _ci("0.11", "0.09, 0.14") and rows["Mathlib folder"][1] == "0.09"
+    for label in ("Mathlib folder, 2 levels", "Theorem namespace", "Theorem namespace, 2 levels",
+                  "$k$-means on goal states", "$k$-means on microstates", "Microstates",
+                  "Judges' proof label", "Random partition"):
+        assert r"\tbd" not in " ".join(rows[label]), label
+    assert rows["$k$-means on goal states"][1] == "0.16" and rows["Random partition"][1] == "0.00"
+    assert rows[r"\quad steps shuffled"] == ["0.00", "--", "0.00"]
+    assert rows[r"\quad proofs swapped"] == ["0.08", "--", "0.03"]
+    assert rows[r"\quad shuffled within each proof"] == ["0.29", "--", "--"]
+    assert r"\tbd" not in (figs / "table_areas.tex").read_text()
+
+    v = macros(figs / "results_macros.tex")
+    assert v["resMacroNMI"] == "0.31" and v["resMacroAMI"] == "0.21"  # headline NMI stays the pilot's
+    assert v["resMacroNMILo"] == "0.29" and v["resMacroNMIHi"] == "0.34"
+    assert v["resFolderAMI"] == "0.09" and v["resNamespaceNMI"] == "0.13" and v["resNamespaceAMI"] == "0.08"
+    assert v["resKmeansNMI"] == "0.24" and v["resKmeansAMI"] == "0.16"
+    assert v["resNullRowNMI"] == "0.00" and v["resNullRowP"] == "0.001"
+    assert v["resNullProofNMI"] == "0.08" and v["resNullProofP"] == "0.012"
+    assert v["resNullWithinNMI"] == "0.29" and v["resNullWithinP"] == "0.034"
+
+
+def test_table_areas_from_significance_alone(tmp_path, paper_dir):
+    """No robustness run: the pilot's rows get the significance intervals, the rest stay red."""
+    results = make_results(tmp_path / "results", search=False)
+    shutil.rmtree(results / "pilot3" / "robustness")
+    _write_significance(results / "significance")
+    P.run(results, paper_dir, verbose=False)
+    rows = _area_rows(paper_dir / "figures" / "table_areas.tex")
+    assert rows["Macrostates ($m = 3$)"] == [_ci("0.31", "0.28, 0.35"), r"\tbd",
+                                              _ci("0.20", "0.17, 0.23")]
+    assert rows["Mathlib folder"][0] == _ci("0.11", "0.09, 0.13")
+    assert rows["Theorem namespace"] == [r"\tbd"] * 3 and rows["$k$-means on goal states"] == [r"\tbd"] * 3
+    assert rows[r"\quad steps shuffled"] == ["0.00", "--", r"\tbd"]  # the significance global shuffle
+    assert rows[r"\quad proofs swapped"] == [r"\tbd", "--", r"\tbd"]
+    assert rows[r"\quad shuffled within each proof"] == ["0.29", "--", "--"]
+    v = macros(paper_dir / "figures" / "results_macros.tex")
+    assert v["resNullRowP"] == "0.001" and v["resNullProofP"] == r"\tbd" and v["resMacroNMILo"] == "0.28"
+
+
+def test_table_areas_preview_matches_code():
+    prev = REPO / "paper" / "figures" / "preview" / "table_areas.tex"
+    assert prev.read_text() == P.HEADER + " (preview).\n" + P.table_areas_tex({})
+    rows = _area_rows(prev)
+    assert len(rows) == len(P.AREA_ROWS) + len(P.NULL_ROWS) + 1
+    # cells no run can fill print a plain dash; everything else waits in red
+    assert rows["Synthetic, planted areas"] == [r"\tbd", "--", r"\tbd"]
+    assert all(r"\tbd" in c for c in rows["Macrostates ($m = 10$)"])
+
+
+def test_tex_ci():
+    assert P.tex_ci(0.312, 0.29, 0.34) == _ci("0.31", "0.29, 0.34")
+    assert P.tex_ci(0.312) == "0.31" and P.tex_ci(float("nan"), 0.1, 0.2) == r"\tbd"
+    assert P.tex_ci(-0.004, -0.01, 0.003) == _ci("0.00", "$-$0.01, 0.00")
