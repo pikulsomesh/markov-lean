@@ -43,8 +43,8 @@ sentence or number; **Left** rows wait on the author or on a result.
 
 - `configs/full.yaml` says the pilot picked 200 microstates; the real fit picked 100. A comment only, left alone
   (configs are out of scope here).
-- `docs/data_card.md` and `scripts/paper_assets.py` called Lean Workbook "judge validation"; both now say
-  projection, matching Table 1.
+- `scripts/paper_assets.py` called Lean Workbook "judge validation"; it now says projection, matching Table 1.
+  `docs/data_card.md` says the same and is left alone here, because open PR 44 edits the next line.
 
 ## Checked and consistent
 
