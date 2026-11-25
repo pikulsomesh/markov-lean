@@ -92,6 +92,18 @@ def _significance(rest: list[str]) -> int:
     return significance.main(rest)
 
 
+def _export_dataset(rest: list[str]) -> int:
+    from markov_lean import release
+
+    return release.export_main(rest)
+
+
+def _check_release(rest: list[str]) -> int:
+    from markov_lean import release
+
+    return release.check_main(rest)
+
+
 # Commands that parse their own options.
 PASSTHROUGH = {
     "cases": (_cases, "pick readable proofs that cross areas; write the case-study figure and table"),
@@ -99,6 +111,8 @@ PASSTHROUGH = {
     "search-report": (_search_report, "pass@k tables, paired tests and figures from search-eval runs"),
     "bridges": (_bridges, "tactics and lemmas at the steps where a proof switches area, with lift and CIs"),
     "significance": (_significance, "proof-level significance tests for gate 1 on a finished pilot run"),
+    "export-dataset": (_export_dataset, "write the labelled dataset release folder from a pilot run (no upload)"),
+    "check-release": (_check_release, "check a release folder is complete, consistent and free of keys/paths"),
 }
 
 
