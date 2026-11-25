@@ -17,3 +17,12 @@
       {\fbox{\parbox[c][0.45\linewidth][c]{#2}{\centering\scriptsize\texttt{\detokenize{#1}}\\not rendered yet}}}}}
 % Placeholder for a number that waits on a run.
 \newcommand{\tbd}{\textcolor{red}{--}}
+% Input a generated table fragment from figures/ if it exists; else its
+% synthetic preview from figures/preview/ with a red note; else a labelled box.
+\newcommand{\maybetable}[1]{%
+  \IfFileExists{figures/#1.tex}%
+    {\input{figures/#1.tex}}%
+    {\IfFileExists{figures/preview/#1.tex}%
+      {\input{figures/preview/#1.tex}\par\vspace{1pt}%
+        {\tiny\textcolor{red}{synthetic preview, not a result}}}%
+      {\fbox{\scriptsize\texttt{\detokenize{#1}} not rendered yet}}}}
