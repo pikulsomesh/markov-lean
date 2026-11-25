@@ -208,7 +208,10 @@ def score_judge(pl: pd.DataFrame, gold: pd.DataFrame, n_boot: int = 2000, seed: 
 
 
 def report(labels: pd.DataFrame, gold: pd.DataFrame, judges: Sequence[str] | None = None,
-           n_boot: int = 2000, seed: int = 0) -> dict:
+           n_boot: int = 2000, seed: int = 0, eval_split: str = "all") -> dict:
+    """Score every judge. ``eval_split`` ("all", "dev" or "test") keeps only that half of the
+    fixed dev/test split (``gold.eval_split``); report on "test" for a prompt designed on "dev"."""
+    gold = G.select_split(gold, eval_split)
     pl = problem_labels(clean_labels(labels))
     pl = pl[pl.proof_id.isin(set(gold.id))]
     judges = list(judges) if judges else sorted(pl.judge.unique())
@@ -216,7 +219,8 @@ def report(labels: pd.DataFrame, gold: pd.DataFrame, judges: Sequence[str] | Non
         raise ValueError("no judge labels match a gold problem id; were the labels made from `gold-set steps`?")
     rep: dict[str, Any] = {
         "gold": G.balance(gold),
-        "settings": {"n_boot": n_boot, "seed": seed, "resampling_unit": "problem", "label": "proof-level (step -1)"},
+        "settings": {"n_boot": n_boot, "seed": seed, "resampling_unit": "problem", "label": "proof-level (step -1)",
+                     "eval_split": eval_split, "eval_split_seed": G.EVAL_SPLIT_SEED},
         "judges": {},
     }
     for i, j in enumerate(judges):
@@ -242,7 +246,8 @@ def markdown(rep: dict) -> str:
         f"Gold set: {g['status'].get('strict', 0)} strict problems in {len(g['strict_classes'])} classes and "
         f"{g['status'].get('family', 0)} family problems (from {g['n_problems']}; "
         f"{g['status'].get('excluded', 0)} excluded). Intervals: 95% bootstrap over problems, "
-        f"{rep['settings']['n_boot']} resamples.",
+        f"{rep['settings']['n_boot']} resamples."
+        + _split_note(rep["settings"].get("eval_split", "all")),
         "",
         "| judge | coverage | accuracy | macro-F1 | balanced acc. | majority baseline | family acc. |",
         "|---|---|---|---|---|---|---|",
@@ -273,6 +278,13 @@ def markdown(rep: dict) -> str:
             lines += ["", "Accuracy by source: " + ", ".join(
                 f"{k} {_f(v['accuracy'])} (n={v['n']})" for k, v in s["by_source"].items()) + "."]
     return "\n".join(lines) + "\n"
+
+
+def _split_note(which: str) -> str:
+    if which == "all":
+        return ""
+    return (f" Problems: the {which} half of the fixed dev/test split "
+            f"(`data/gold/msc_gold_eval_split.csv`, seed {G.EVAL_SPLIT_SEED}).")
 
 
 def figure(rep: dict):
@@ -373,10 +385,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default=None, help="write the report, confusion CSVs and figure here")
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--eval-split", choices=["all", *G.EVAL_SPLITS], default="all",
+                    help="score only the dev or test half of the fixed dev/test split (default all); "
+                         "use test for any prompt that was designed on dev")
     ap.add_argument("--no-figures", action="store_true")
     a = ap.parse_args(argv)
     gold = G.read_gold(a.gold)
-    rep = report(read_labels(a.labels), gold, a.judges, a.n_boot, a.seed)
+    rep = report(read_labels(a.labels), gold, a.judges, a.n_boot, a.seed, a.eval_split)
     print(markdown(rep))
     if a.out:
         for p in write(rep, a.out, figures=not a.no_figures):

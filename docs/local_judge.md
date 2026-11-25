@@ -72,6 +72,18 @@ Other options: `--all` labels every proof; `--model llama3.1:8b-instruct-q4_K_M`
 its own folder; `--host` points at another Ollama server; `--num-ctx` changes the context window. See
 `markov-lean local-judge label --help`.
 
+## Prompt versions
+
+`--prompt v1` (the default) is the API judges' prompt, unchanged, which is what a cross-family agreement
+check needs. `--prompt v2` (`src/markov_lean/prompts.py`) is an opt-in prompt written for the 7B model:
+it asks for the theorem's area first, after a short `topic` field naming the objects the statement is
+about; it defines the classes common in Lean with their Lean signals and tie-breaks (a real sequence is 40,
+not 26; counting is 05, not 03; a group of order 351 is 20, not 11; 03 only for statements about logic or
+set theory itself); it adds twelve short examples written for the prompt, none of them a gold-set problem;
+and it shows a `sorry` step without repeating the goal. v2 labels are written as judge
+`ollama/<model>@v2` into `<model>_v2/` by default, and a folder started with one version refuses the
+other. The API judges always use v1.
+
 ## Expected time
 
 The first request also loads the model (a few seconds). After that, a typical pilot proof (about 15 shown
