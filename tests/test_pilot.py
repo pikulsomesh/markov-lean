@@ -77,3 +77,23 @@ def test_unknown_msm_key_is_refused():
 def test_missing_processed_data_says_how_to_fetch(tmp_path):
     with pytest.raises(FileNotFoundError, match="fetch_data.sh"):
         pilot.load_steps({"source": "leandojo", "processed_dir": str(tmp_path)})
+
+
+def test_macrostate_sweep_reported(tmp_path):
+    cfg = {"data": {"source": "synthetic", "synthetic": {"n_proofs": 200, "seed": 4}},
+           "msm": {**FAST_MSM, "n_macrostates": 6}, "eval": {"macrostate_sweep": [2, 6, 10]}}
+    pilot.run(cfg, tmp_path, verbose=False)
+    ev = json.loads((tmp_path / "pilot_report.json").read_text())["eval"]
+    assert set(ev["macrostate_sweep"]) == {"2", "6", "10"}
+    assert ev["gate1"]["k"] == 6
+    # six hidden areas: k=6 recovers them better than k=2 can
+    assert ev["macrostate_sweep"]["6"]["nmi"] > ev["macrostate_sweep"]["2"]["nmi"]
+    assert abs(ev["macrostate_sweep"]["6"]["nmi"] - ev["macrostates"]["nmi"]) < 0.05
+
+
+def test_shipped_config_loads():
+    import yaml
+
+    cfg = yaml.safe_load(open(pilot.ROOT / "configs" / "pilot.yaml"))
+    assert pilot.msm_config(cfg["msm"]).n_macrostates == 10
+    assert cfg["data"]["min_steps"] >= 8

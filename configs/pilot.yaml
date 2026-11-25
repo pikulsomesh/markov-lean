@@ -7,18 +7,21 @@ data:
   split: train
   processed_dir: data/processed
   max_proofs: 20000         # keeps the run within the Mac Mini's 16 GB
-  min_steps: 2              # a proof needs a transition to count
+  min_steps: 8              # most LeanDojo proofs are 1-4 steps; an area change needs room, and the
+                            # Chapman-Kolmogorov test needs proofs longer than 4 x lag
   seed: 0
 msm:                        # any field of markov_lean.msm.MSMConfig
   featurizer: tfidf_svd
   featurizer_kwargs: {n_components: 128}
   n_microstates: [100, 200, 400]   # picked by cross-validated VAMP-2
   lag: auto                 # picked by implied-timescale convergence
-  max_macrostates: 12       # number of areas picked by the spectral gap, up to this
+  n_macrostates: 10         # fixed before seeing labels; on the first Mac run the spectral gap alone picked 2
+  max_macrostates: 12
   bayesian_samples: 50
 judge:
   config: configs/judge.yaml
   sample_proofs: 1000       # labelled by both judges; NMI/ARI uses their consensus
 eval:
   topk: [1, 3]
+  macrostate_sweep: [2, 4, 6, 8, 10, 12]   # agreement at each k, reported next to the gate
   gate_nmi: 0.15            # gate 1: macrostates must clear this and beat the Mathlib-folder baseline
