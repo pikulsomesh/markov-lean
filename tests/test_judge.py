@@ -179,9 +179,10 @@ def test_budget_guard_blocks_before_any_call(proofs, cfg, tmp_path):
 
 
 def test_cli_cap_cannot_raise_config_cap(proofs, cfg):
-    est = judge.CostEstimate({HAIKU: {"requests": 1, "input_tokens": 1, "output_tokens": 1, "dollars": 30.0}}, 0.5)
+    over = cfg.max_dollars + 10.0  # just over the shipped config cap
+    est = judge.CostEstimate({HAIKU: {"requests": 1, "input_tokens": 1, "output_tokens": 1, "dollars": over}}, 0.5)
     with pytest.raises(judge.BudgetExceeded):
-        judge.check_budget(est, cfg, max_dollars=100.0)  # config cap is 20
+        judge.check_budget(est, cfg, max_dollars=cfg.max_dollars * 10)
 
 
 def test_dry_run_writes_requests_and_calls_nothing(proofs, cfg, tmp_path):

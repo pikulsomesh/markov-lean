@@ -20,7 +20,7 @@ msm:                        # any field of markov_lean.msm.MSMConfig
   bayesian_samples: 50
 judge:
   config: configs/judge.yaml
-  sample_proofs: 1000       # labelled by both judges; NMI/ARI uses their consensus
+  sample_proofs: 10000   # above the pilot's 8,423 proofs, so the judges label all of them
 eval:
   topk: [1, 3]
   macrostate_sweep: [2, 4, 6, 8, 10, 12]   # agreement at each k, reported next to the gate
