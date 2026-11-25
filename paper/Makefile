@@ -10,7 +10,7 @@ all: pdf
 
 pdf: $(MAIN).pdf
 
-$(MAIN).pdf: $(MAIN).tex macros.tex refs.bib $(wildcard sections/*.tex) $(wildcard figures/*.pdf)
+$(MAIN).pdf: $(MAIN).tex macros.tex refs.bib $(wildcard *.sty) $(wildcard *.bst) $(wildcard sections/*.tex) $(wildcard figures/*.pdf)
 ifdef LATEXMK
 	latexmk -pdf -interaction=nonstopmode -halt-on-error $(MAIN).tex
 else
