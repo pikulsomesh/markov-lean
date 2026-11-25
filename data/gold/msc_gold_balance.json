@@ -1,0 +1,258 @@
+{
+ "n_problems": 1532,
+ "status": {
+  "excluded": 640,
+  "strict": 546,
+  "family": 346
+ },
+ "by_source": {
+  "minif2f": {
+   "excluded": 352,
+   "strict": 136
+  },
+  "proofnet": {
+   "strict": 282,
+   "family": 57,
+   "excluded": 32
+  },
+  "putnam": {
+   "family": 289,
+   "excluded": 256,
+   "strict": 128
+  }
+ },
+ "strict_classes": {
+  "11": {
+   "n": 223,
+   "title": "Number theory",
+   "share": 0.4084
+  },
+  "20": {
+   "n": 93,
+   "title": "Group theory and generalizations",
+   "share": 0.1703
+  },
+  "15": {
+   "n": 78,
+   "title": "Linear and multilinear algebra; matrix theory",
+   "share": 0.1429
+  },
+  "54": {
+   "n": 76,
+   "title": "General topology",
+   "share": 0.1392
+  },
+  "05": {
+   "n": 20,
+   "title": "Combinatorics",
+   "share": 0.0366
+  },
+  "30": {
+   "n": 16,
+   "title": "Functions of a complex variable",
+   "share": 0.0293
+  },
+  "26": {
+   "n": 13,
+   "title": "Real functions",
+   "share": 0.0238
+  },
+  "40": {
+   "n": 11,
+   "title": "Sequences, series, summability",
+   "share": 0.0201
+  },
+  "12": {
+   "n": 7,
+   "title": "Field theory and polynomials",
+   "share": 0.0128
+  },
+  "60": {
+   "n": 5,
+   "title": "Probability theory and stochastic processes",
+   "share": 0.0092
+  },
+  "03": {
+   "n": 4,
+   "title": "Mathematical logic and foundations",
+   "share": 0.0073
+  }
+ },
+ "strict_classes_by_source": {
+  "03": {
+   "putnam": 4
+  },
+  "05": {
+   "putnam": 20
+  },
+  "11": {
+   "minif2f": 136,
+   "putnam": 66,
+   "proofnet": 21
+  },
+  "12": {
+   "proofnet": 7
+  },
+  "15": {
+   "proofnet": 45,
+   "putnam": 33
+  },
+  "20": {
+   "proofnet": 93
+  },
+  "26": {
+   "proofnet": 13
+  },
+  "30": {
+   "proofnet": 16
+  },
+  "40": {
+   "proofnet": 11
+  },
+  "54": {
+   "proofnet": 76
+  },
+  "60": {
+   "putnam": 5
+  }
+ },
+ "family_rules": {
+  "proofnet:dummit_foote_rings": {
+   "n": 24,
+   "codes": "13;16"
+  },
+  "proofnet:herstein_rings": {
+   "n": 1,
+   "codes": "13;16"
+  },
+  "proofnet:pugh_function_spaces": {
+   "n": 1,
+   "codes": "26;40;46"
+  },
+  "proofnet:rudin_continuity": {
+   "n": 16,
+   "codes": "26;54"
+  },
+  "proofnet:rudin_numbers": {
+   "n": 15,
+   "codes": "11;12;26"
+  },
+  "putnam:abstract_algebra": {
+   "n": 21,
+   "codes": "08;12;13;16;17;20"
+  },
+  "putnam:abstract_algebra+linear_algebra": {
+   "n": 2,
+   "codes": "08;12;13;15;16;17;20"
+  },
+  "putnam:abstract_algebra+number_theory": {
+   "n": 2,
+   "codes": "08;11;12;13;16;17;20"
+  },
+  "putnam:analysis": {
+   "n": 176,
+   "codes": "26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49"
+  },
+  "putnam:analysis+combinatorics": {
+   "n": 1,
+   "codes": "05;26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49"
+  },
+  "putnam:analysis+geometry": {
+   "n": 7,
+   "codes": "26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49;51;52"
+  },
+  "putnam:analysis+linear_algebra": {
+   "n": 6,
+   "codes": "15;26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49"
+  },
+  "putnam:analysis+linear_algebra+number_theory": {
+   "n": 1,
+   "codes": "11;15;26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49"
+  },
+  "putnam:analysis+number_theory": {
+   "n": 7,
+   "codes": "11;26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49"
+  },
+  "putnam:analysis+number_theory+probability": {
+   "n": 1,
+   "codes": "11;26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49;60"
+  },
+  "putnam:analysis+probability": {
+   "n": 1,
+   "codes": "26;28;30;31;32;33;34;35;37;39;40;41;42;43;44;45;46;47;49;60"
+  },
+  "putnam:combinatorics+geometry": {
+   "n": 5,
+   "codes": "05;51;52"
+  },
+  "putnam:combinatorics+linear_algebra": {
+   "n": 1,
+   "codes": "05;15"
+  },
+  "putnam:combinatorics+linear_algebra+number_theory": {
+   "n": 1,
+   "codes": "05;11;15"
+  },
+  "putnam:combinatorics+number_theory": {
+   "n": 2,
+   "codes": "05;11"
+  },
+  "putnam:combinatorics+probability": {
+   "n": 1,
+   "codes": "05;60"
+  },
+  "putnam:combinatorics+set_theory": {
+   "n": 2,
+   "codes": "03;05"
+  },
+  "putnam:geometry": {
+   "n": 40,
+   "codes": "51;52"
+  },
+  "putnam:geometry+linear_algebra": {
+   "n": 2,
+   "codes": "15;51;52"
+  },
+  "putnam:geometry+linear_algebra+number_theory": {
+   "n": 1,
+   "codes": "11;15;51;52"
+  },
+  "putnam:geometry+number_theory": {
+   "n": 2,
+   "codes": "11;51;52"
+  },
+  "putnam:geometry+number_theory+probability": {
+   "n": 1,
+   "codes": "11;51;52;60"
+  },
+  "putnam:geometry+probability": {
+   "n": 2,
+   "codes": "51;52;60"
+  },
+  "putnam:linear_algebra+number_theory": {
+   "n": 2,
+   "codes": "11;15"
+  },
+  "putnam:linear_algebra+probability": {
+   "n": 1,
+   "codes": "15;60"
+  },
+  "putnam:number_theory+set_theory": {
+   "n": 1,
+   "codes": "03;11"
+  }
+ },
+ "excluded_reasons": {
+  "school algebra has no single MSC class": 176,
+  "Putnam 'algebra' spans polynomials, inequalities and sequences": 173,
+  "the competition name gives no area": 160,
+  "one of the tags has no MSC class: Putnam 'algebra' spans polynomials, inequalities and sequences": 82,
+  "Artin's chapter numbering differs between editions past chapter 3": 20,
+  "the name gives a proof method, not an area": 16,
+  "ProofNet's Putnam problems carry no topic": 12,
+  "no Lean 4 statement in lean4/src": 1
+ },
+ "n_scored": 892,
+ "majority_class": "11",
+ "majority_share": 0.4084
+}
