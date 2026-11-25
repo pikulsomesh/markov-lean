@@ -16,7 +16,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "reproduce.sh"
-STAGES = "setup data synthetic pilot judge score full search report paper release".split()
+STAGES = "setup data synthetic pilot judge score analysis full search report paper release".split()
 
 pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
 
@@ -34,11 +34,15 @@ def test_script_parses():
 def test_dry_run_lists_every_stage_and_runs_nothing(tmp_path):
     r = sh("--dry-run", "--pilot", str(tmp_path / "p"), "--release", str(tmp_path / "rel"))
     assert r.returncode == 0, r.stderr
-    for stage in ("setup", "data", "synthetic", "pilot pass 1", "judge labels", "pilot pass 2", "full fit",
+    for stage in ("setup", "data", "synthetic", "pilot pass 1", "judge labels", "pilot pass 2", "gate 1 analysis",
+                  "full fit",
                   "proof search", "search report", "paper", "dataset release"):
         assert f"== {stage}" in r.stdout, stage
     assert "+ bash scripts/fetch_data.sh" in r.stdout
     assert "export-dataset" in r.stdout and "check-release" in r.stdout
+    for cmd in ("cli robustness --pilot", "cli significance --run", "cli bridges --run", "cli cases --run",
+                "cli paper --results results --paper paper"):
+        assert cmd in r.stdout, cmd
     assert not (tmp_path / "p").exists() and not (tmp_path / "rel").exists()
     assert "judge submit" not in r.stdout  # no API call without --run-judges
 
@@ -135,8 +139,29 @@ def test_reproduce_from_cached_labels_to_release(synthetic_pilot):
     assert f"{rel}: OK" in r.stdout
     for name in ("implied_timescales", "chapman_kolmogorov", "transition_matrix", "judge_confusion", "area_flow"):
         assert (paper / "figures" / f"{name}.pdf").stat().st_size > 1000, name
-    assert (paper / "tables" / "areas.tex").exists() and (paper / "tables" / "data.tex").exists()
-    assert "skipped tables/search.tex" in r.stdout and "skipped figures/search_ablation.pdf" in r.stdout
+    # the files main.tex reads: \maybetable{table_*} and the headline numbers
+    figs = paper / "figures"
+    assert (figs / "table_areas.tex").exists() and (figs / "table_data.tex").exists()
+    assert r"\newcommand{\resMacroNMI}" in (figs / "results_macros.tex").read_text()
+    assert not (figs / "table_search.tex").exists() and "preview  search_ablation" in r.stdout
+
+
+def test_analysis_stage_feeds_the_paper(synthetic_pilot):
+    """robustness, significance, bridges and cases write where `markov-lean paper` and main.tex look."""
+    pytest.importorskip("matplotlib")
+    root, pilot_dir, labels, _, config = synthetic_pilot
+    if not (pilot_dir / "judge" / "labels.parquet").exists():
+        shutil.copyfile(labels, pilot_dir / "judge" / "labels.parquet")
+    paper = root / "paper_analysis"
+    env = {"PAPER_OUT": str(paper), "SEARCH_OUT": str(root / "no_search"), "PILOT_CONFIG": str(config),
+           "ROBUSTNESS_ARGS": "--no-sweep --no-figures --bootstrap 20 --permutations 20"}
+    r = sh("--stage", "analysis", "--stage", "paper", "--pilot", str(pilot_dir), env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (pilot_dir / "robustness" / "baselines.csv").exists()
+    assert (pilot_dir / "significance" / "significance.json").exists()
+    assert (pilot_dir / "bridges" / "summary.json").exists()
+    assert (paper / "figures" / "case_studies_table.tex").exists()
+    assert "real     resRandomNMI" in r.stdout and "real     bridges.pdf" in r.stdout
 
 
 def test_paper_assets_tables(synthetic_pilot):

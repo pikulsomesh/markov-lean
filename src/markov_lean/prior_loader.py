@@ -47,13 +47,19 @@ class MSMArtifacts:
 
 
 def _resolve(msm_dir: str | Path) -> Path:
+    """Relative paths are tried from the working directory first, then from the repo root."""
     p = Path(msm_dir).expanduser()
-    return p if p.is_absolute() else ROOT / p
+    if p.is_absolute():
+        return p
+    here = Path.cwd() / p
+    return here if here.exists() or not (ROOT / p).exists() else ROOT / p
 
 
 def load_msm_artifacts(msm_dir: str | Path) -> MSMArtifacts:
     """Read what the area prior needs from a saved model directory, checking shapes agree."""
     d = _resolve(msm_dir)
+    if not d.is_dir():
+        raise FileNotFoundError(f"model folder {d} not found; pass the `msm/` folder of a pilot or full run")
     missing = [f for f in REQUIRED if not (d / f).exists()]
     if missing:
         raise FileNotFoundError(

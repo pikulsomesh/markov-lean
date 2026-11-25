@@ -68,3 +68,18 @@ def test_old_run_without_artifacts_says_rerun(tmp_path):
     (tmp_path / "coarse_T.npy").write_bytes(b"")
     with pytest.raises(FileNotFoundError, match="Rerun `markov-lean pilot`"):
         load_msm_artifacts(tmp_path)
+
+
+def test_relative_model_folder_is_read_from_the_working_directory(msm_dir, tmp_path, monkeypatch):
+    """search-eval --msm-dir results/pilot3/msm run outside the repo root used to read <repo>/results/..."""
+    import shutil
+
+    out, _, _ = msm_dir
+    shutil.copytree(out, tmp_path / "results" / "pilot3" / "msm")
+    monkeypatch.chdir(tmp_path)
+    assert isinstance(build_area_prior("results/pilot3/msm", lam=0.3), AreaPrior)
+
+
+def test_missing_model_folder_says_not_found(tmp_path):
+    with pytest.raises(FileNotFoundError, match="not found"):
+        load_msm_artifacts(tmp_path / "no_such_msm")

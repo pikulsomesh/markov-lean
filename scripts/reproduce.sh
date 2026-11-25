@@ -9,7 +9,7 @@
 #   bash scripts/reproduce.sh --labels path/to/labels.parquet   # use judge labels you already have
 #   bash scripts/reproduce.sh --run-judges     # call the Anthropic API (asks first; ~$78 for pilot3)
 #
-# Stages, in order: setup data synthetic pilot judge score full search report paper release
+# Stages, in order: setup data synthetic pilot judge score analysis full search report paper release
 #
 # Nothing here spends money unless you pass --run-judges (Anthropic API, after an estimate and
 # a typed "yes") or run the search stage on a GPU instance you launched yourself. The script
@@ -18,7 +18,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ALL_STAGES="setup data synthetic pilot judge score full search report paper release"
+ALL_STAGES="setup data synthetic pilot judge score analysis full search report paper release"
 STAGES=""
 DRY_RUN=0
 RUN_JUDGES=0
@@ -31,6 +31,7 @@ SEARCH_OUT=${SEARCH_OUT:-results/search_eval}
 PILOT_CONFIG=${PILOT_CONFIG:-configs/pilot.yaml}
 PAPER_OUT=${PAPER_OUT:-paper}           # where paper_assets.py writes figures/ and tables/
 MAX_DOLLARS=${MAX_DOLLARS:-85}
+ROBUSTNESS_ARGS=${ROBUSTNESS_ARGS:-}    # e.g. "--jobs 4" or "--quick" for markov-lean robustness
 PY=${PY:-}
 
 usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; }
@@ -163,6 +164,27 @@ if want score; then
   fi
 fi
 
+if want analysis; then
+  say "gate 1 analysis (Mac, free): robustness, significance, bridge steps, case studies"
+  if [ -f "$LABELS_DST" ] || [ "$DRY_RUN" = 1 ]; then
+    # robustness exits 1 when the robust verdict fails; its tables are still written, so carry on then
+    status=0
+    run $ML robustness --pilot "$PILOT" $ROBUSTNESS_ARGS || status=$?
+    if [ "$status" != 0 ] && [ "$DRY_RUN" = 0 ]; then
+      if [ -f "$PILOT/robustness/robustness.json" ]; then
+        echo "robustness verdict did not pass; see $PILOT/robustness/robustness.md"
+      else
+        echo "robustness failed (exit $status)" >&2; exit "$status"
+      fi
+    fi
+    run $ML significance --run "$PILOT" --config "$PILOT_CONFIG"
+    run $ML bridges --run "$PILOT" --out "$PILOT/bridges"
+    run $ML cases --run "$PILOT" --out "$PAPER_OUT/figures"
+  else
+    echo "skipped: no $LABELS_DST"
+  fi
+fi
+
 if want full; then
   say "full fit and projection (Mac, free, 16 GB): every LeanDojo train proof, all datasets placed"
   run $ML full --config configs/full.yaml --out results/full
@@ -196,7 +218,8 @@ fi
 
 if want paper; then
   say "paper figures, tables and PDF (Mac, free)"
-  run $PY scripts/paper_assets.py --pilot "$PILOT" --search "$SEARCH_OUT/report" --out "$PAPER_OUT"
+  # writes <paper>/figures: the figures, table_*.tex and results_macros.tex that main.tex reads
+  run $ML paper --results results --paper "$PAPER_OUT" --pilot "$PILOT" --search "$SEARCH_OUT"
   if [ "$PAPER_OUT" != paper ]; then
     echo "PAPER_OUT is not paper/: not building the PDF"
   elif command -v latexmk >/dev/null 2>&1 || command -v pdflatex >/dev/null 2>&1; then
