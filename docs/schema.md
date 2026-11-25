@@ -78,3 +78,21 @@ Written by `markov-lean search-eval` as `<out>/<benchmark>/<condition>/seed<k>/s
 | `root_area` | int or null | most likely Markov-model area of the first goal state, when `msm_dir` loads |
 | `name_area` | str or null | miniF2F problem group from the name (`algebra`, `number_theory`, `amc`, `aime`, `imo`, `induction`) |
 | `worker`, `finished_at` | int, str | worker process and UTC time |
+
+## `gold` (one row per benchmark problem; `data/gold/msc_gold.csv`)
+
+Written by `markov-lean gold-set build`; see `docs/judge_accuracy.md` for the rules.
+
+| column | type | notes |
+|---|---|---|
+| `id` | str | `<source>:<name>`, the `proof_id` the judges' labels carry |
+| `source` | str | `minif2f`, `proofnet`, `putnam` |
+| `split` | str | `val` or `test` |
+| `name` | str | benchmark name; ProofNet names are `<book>\|<exercise>` |
+| `source_label` | str | the metadata the label came from (`name:...`, `book:... ch...`, `tags:...`) |
+| `status` | str | `strict`, `family` or `excluded` |
+| `msc` | str | the one MSC top-level code for strict rows, else empty |
+| `msc_family` | str | accepted codes, `;`-separated (equal to `msc` for strict rows) |
+| `rule` | str | the table row that gave the label |
+| `reason` | str | why an excluded row is excluded |
+| `statement` | str | the Lean 4 initial goal (miniF2F, ProofNet) or theorem statement (PutnamBench) |
