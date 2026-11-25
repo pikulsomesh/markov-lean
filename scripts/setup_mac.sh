@@ -23,7 +23,7 @@ if [ ! -d .venv ]; then "$PY" -m venv .venv; fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 pip install -q --upgrade pip
-pip install -q -e ".[dev,judge]"
+pip install -q -e ".[dev,judge,search,figures]"
 pytest -q
 
 if [ "${WITH_LEAN:-0}" = "1" ]; then

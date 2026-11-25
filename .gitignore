@@ -11,3 +11,4 @@ lean/.lake/
 .env
 *.key
 data/processed/
+*.egg-info/

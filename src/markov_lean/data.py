@@ -9,11 +9,16 @@ Sources and their raw layouts (as downloaded by scripts/fetch_data.sh into data/
   LeanDojo's export code (scripts/generate-benchmark-lean4.ipynb in lean-dojo/LeanDojo).
   The export drops tactics whose state_before is "no goals" and focusing dots, so step
   numbers count the kept tactics only.
-- Lean Workbook: ``lean_workbook/lean_workbook.json`` with columns ``id, status, tactic,
-  state_before, state_after, natural_language_statement, answer, formal_statement``.
-  Each row is one problem with at most one recorded tactic, so it yields at most one step.
-- miniF2F, ProofNet, PutnamBench: git checkouts of Lean source files. They hold theorem
-  statements without proofs, so they yield one row per theorem with ``step = -1``.
+- Lean Workbook: two files in ``lean_workbook/``. ``wkbk_1009.parquet`` has columns ``id,
+  status, tactic, state_before, state_after, ...`` (one recorded tactic per problem), which
+  gives one step each. ``lean_workbook.json`` is a list of about 140k problems with
+  ``natural_language_statement, answer, tags, formal_statement, split, proof`` and no tactic
+  data, so it is loaded as statements only.
+- miniF2F and ProofNet: the JSON-lines copies in DeepSeek-Prover-V1.5's ``datasets/`` folder
+  (fields ``name, split, informal_prefix, formal_statement, goal, header``), which carry the
+  valid/test split and the initial goal state. One row per theorem, ``step = -1``.
+- PutnamBench: a git checkout of Lean source files; theorem statements are scanned from
+  the ``.lean`` files. One row per theorem, ``step = -1``.
 """
 from __future__ import annotations
 
@@ -134,6 +139,8 @@ def load_workbook(path: Path, proved_only: bool = True) -> pd.DataFrame:
     rows = []
     for r in records:
         tactic = r.get("tactic")
+        if not isinstance(tactic, str):  # None or NaN from Parquet
+            tactic = ""
         if not tactic:
             continue
         if proved_only and "disprov" in str(r.get("status", "")).lower():
@@ -148,17 +155,73 @@ def load_workbook(path: Path, proved_only: bool = True) -> pd.DataFrame:
                 "theorem": pid,
                 "file_path": "",
                 "tactic": tactic,
-                "state_before": r.get("state_before") or "",
-                "state_after": r.get("state_after") or "",
+                "state_before": r.get("state_before") if isinstance(r.get("state_before"), str) else "",
+                "state_after": r.get("state_after") if isinstance(r.get("state_after"), str) else "",
                 "true_area": None,
             }
         )
     return _frame(rows)
 
 
+def load_workbook_statements(path: Path) -> pd.DataFrame:
+    """Load ``lean_workbook.json`` (problems without tactic data) as statements, step -1."""
+    with open(path) as f:
+        records = json.load(f)
+    rows = []
+    for i, r in enumerate(records):
+        stmt = r.get("formal_statement") or ""
+        if not stmt:
+            continue
+        m = _DECL.search(stmt)
+        name = m.group(2) if m else f"lean_workbook_{i}"
+        rows.append(_statement_row("workbook", name, "train", "", stmt))
+    return _dedupe_ids(_frame(rows))
+
+
 # ---------------------------------------------------------------------------
 # Statement-only benchmarks (miniF2F, ProofNet, PutnamBench)
 # ---------------------------------------------------------------------------
+
+def _statement_row(source: str, name: str, split: str, file_path: str, stmt: str) -> dict:
+    return {
+        "proof_id": f"{source}:{name}",
+        "step": -1,
+        "source": source,
+        "split": split,
+        "theorem": name,
+        "file_path": file_path,
+        "tactic": "",
+        "state_before": stmt,
+        "state_after": "",
+        "true_area": None,
+    }
+
+
+def _dedupe_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """Make proof_id unique by suffixing repeats with #2, #3, ... (ProofNet reuses names
+    such as exercise_1_1 across textbooks)."""
+    n = df.groupby("proof_id").cumcount()
+    df = df.copy()
+    df.loc[n > 0, "proof_id"] = df.loc[n > 0, "proof_id"] + "#" + (n[n > 0] + 1).astype(str)
+    return df.reset_index(drop=True)
+
+
+def load_jsonl_statements(path: Path, source: str) -> pd.DataFrame:
+    """Load a DeepSeek-Prover style benchmark file (miniF2F, ProofNet).
+
+    ``state_before`` holds the initial goal state when the file gives one (``goal``), else
+    the formal statement. ``valid`` is mapped to ``val``.
+    """
+    rows = []
+    with open(path) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            split = {"valid": "val"}.get(r.get("split", "test"), r.get("split", "test"))
+            stmt = r.get("goal") or r.get("formal_statement") or ""
+            rows.append(_statement_row(source, r["name"], split, "", stmt))
+    return _dedupe_ids(_frame(rows))
 
 _DECL = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:private\s+|protected\s+)?(theorem|lemma)\s+([^\s(:{\[]+)", re.M)
 _END = re.compile(r":=\s*(?:by\b|sorry\b)?", re.M)
@@ -212,8 +275,7 @@ def load_statements(root: Path, source: str, glob: str = "**/*.lean") -> pd.Data
                     "true_area": None,
                 }
             )
-    df = _frame(rows)
-    return df.drop_duplicates(subset=["proof_id"], keep="first").reset_index(drop=True)
+    return _dedupe_ids(_frame(rows))
 
 
 # ---------------------------------------------------------------------------
@@ -260,21 +322,31 @@ def build_all(raw_dir: Path, out_dir: Path, max_theorems: int | None = None) -> 
     else:
         print(f"skip leandojo: {ld} not found")
 
-    wb = raw_dir / "lean_workbook" / "lean_workbook.json"
-    if wb.exists():
-        written.append(write_steps(load_workbook(wb), out_dir, "workbook", "train"))
+    wb_dir = raw_dir / "lean_workbook"
+    if (wb_dir / "wkbk_1009.parquet").exists():
+        written.append(write_steps(load_workbook(wb_dir / "wkbk_1009.parquet"), out_dir, "workbook", "train"))
     else:
-        print(f"skip workbook: {wb} not found")
+        print(f"skip workbook steps: {wb_dir / 'wkbk_1009.parquet'} not found")
+    if (wb_dir / "lean_workbook.json").exists():
+        written.append(
+            write_steps(load_workbook_statements(wb_dir / "lean_workbook.json"), out_dir, "workbook_statements", "train")
+        )
 
-    for source, sub in (("minif2f", "miniF2F-lean4"), ("proofnet", "ProofNet-lean4"), ("putnam", "PutnamBench")):
-        d = raw_dir / sub
-        if not d.exists():
-            print(f"skip {source}: {d} not found")
+    for source in ("minif2f", "proofnet"):
+        f = raw_dir / "deepseek_benchmarks" / f"{source}.jsonl"
+        if not f.exists():
+            print(f"skip {source}: {f} not found")
             continue
-        glob = "lean4/**/*.lean" if source == "putnam" else "**/*.lean"
-        df = load_statements(d, source, glob=glob)
+        df = load_jsonl_statements(f, source)
         for split, part in df.groupby("split"):
             written.append(write_steps(part, out_dir, source, split))
+
+    d = raw_dir / "PutnamBench"
+    if d.exists():
+        df = load_statements(d, "putnam", glob="lean4/**/*.lean")
+        written.append(write_steps(df, out_dir, "putnam", "test"))
+    else:
+        print(f"skip putnam: {d} not found")
 
     for p in written:
         print(f"wrote {p} ({len(pd.read_parquet(p, columns=['proof_id']))} rows)")
