@@ -57,3 +57,24 @@ Written by `markov_lean.search` as `trace.parquet` (and `trace.jsonl` while runn
 | `log_policy` | float or null | log of the normalized prior weight |
 | `path_score` | float or null | cumulative `log_policy` from the root; the search pops the highest first |
 | `elapsed` | float | seconds Lean took on the tactic |
+
+## `search_eval` summary (one row per problem, condition and seed)
+
+Written by `markov-lean search-eval` as `<out>/<benchmark>/<condition>/seed<k>/summary.jsonl`, next to that run's `trace.jsonl` (the `search_trace` table above). A problem is done once its line exists; a resumed run may repeat a line, and readers keep the last.
+
+| column | type | notes |
+|---|---|---|
+| `proof_id`, `theorem`, `source`, `split` | str | as in `steps` |
+| `solved` | bool | |
+| `stop_reason` | str | `solved`, `budget`, `wall_time`, `exhausted`, or `statement error: ...` (counted as unsolved) |
+| `n_tactics` | int | length of the proof found, 0 if none |
+| `expansions`, `nodes` | int | prover calls made, search nodes created |
+| `elapsed` | float | seconds for the problem |
+| `proof` | str | the proof as Lean source, empty if unsolved |
+| `benchmark`, `condition` | str | names from `configs/search_eval.yaml` |
+| `seed` | int | sampling seed sent to vLLM |
+| `order` | int | position in the fixed problem order (`subset_seed`) |
+| `max_expansions`, `wall_time` | int, float | the budget the problem ran under |
+| `root_area` | int or null | most likely Markov-model area of the first goal state, when `msm_dir` loads |
+| `name_area` | str or null | miniF2F problem group from the name (`algebra`, `number_theory`, `amc`, `aime`, `imo`, `induction`) |
+| `worker`, `finished_at` | int, str | worker process and UTC time |
