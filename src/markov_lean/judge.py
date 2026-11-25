@@ -386,18 +386,44 @@ def submit(
     return batch_ids
 
 
+_COUNT_FIELDS = ("processing", "succeeded", "errored", "expired", "canceled")
+
+
+def batch_status_line(bid: str, batch: Any, minutes: float) -> str:
+    """One status line: processing state, request counts and minutes since collect started."""
+    counts = _get(batch, "request_counts")
+    parts = [f"{_get(counts, f, 0) or 0} {f}" for f in _COUNT_FIELDS]
+    return f"[{minutes:.0f} min] {bid}: {batch.processing_status}, " + ", ".join(parts)
+
+
 def wait(client: Any, batch_ids: list[str], poll_seconds: float, timeout_hours: float,
-         sleep: Callable[[float], None] = time.sleep, echo: Callable[[str], None] = print) -> None:
+         sleep: Callable[[float], None] = time.sleep, echo: Callable[[str], None] = print,
+         heartbeat_minutes: float = 10.0) -> None:
+    """Poll until every batch has ended.
+
+    A batch's line is printed when its counts change, and otherwise about every
+    ``heartbeat_minutes`` so a long wait still shows it is alive.
+    """
     deadline = time.monotonic() + timeout_hours * 3600
     pending = list(batch_ids)
+    last: dict[str, tuple] = {}
+    polls = 0
+    every = max(1, round(heartbeat_minutes * 60 / poll_seconds)) if poll_seconds > 0 else 1
     while pending:
         still = []
+        minutes = polls * poll_seconds / 60
         for bid in pending:
             b = client.messages.batches.retrieve(bid)
+            counts = _get(b, "request_counts")
+            key = (b.processing_status, *(_get(counts, f, 0) for f in _COUNT_FIELDS))
             if b.processing_status != "ended":
                 still.append(bid)
-                echo(f"{bid}: {b.processing_status}, {b.request_counts.processing} processing")
+            if b.processing_status != "ended" or bid in last:
+                if key != last.get(bid) or polls % every == 0:
+                    echo(batch_status_line(bid, b, minutes))
+            last[bid] = key
         pending = still
+        polls += 1
         if pending:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"batches still running after {timeout_hours} h: {pending}")
