@@ -59,10 +59,17 @@ def _search_report(rest: list[str]) -> int:
     return search_report.main(rest)
 
 
+def _bridges(rest: list[str]) -> int:
+    from markov_lean import bridges
+
+    return bridges.main(rest)
+
+
 # Commands that parse their own options.
 PASSTHROUGH = {
     "search-eval": (_search_eval, "proof search on miniF2F/PutnamBench under prior conditions (EC2)"),
     "search-report": (_search_report, "pass@k tables, paired tests and figures from search-eval runs"),
+    "bridges": (_bridges, "tactics and lemmas at the steps where a proof switches area, with lift and CIs"),
 }
 
 
