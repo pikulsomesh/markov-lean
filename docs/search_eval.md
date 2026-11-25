@@ -161,7 +161,93 @@ To end a long run and stop the instance in one go:
 $E <flags> --yes --max-usd 20; sudo shutdown -h now
 ```
 
+## On the Mac Mini (no GPU)
+
+When there is no GPU, the core comparison runs on the Mac Mini (M2, 16 GB) with the local
+prover from `MAC_SMOKE.md`: a 4-bit GGUF of DeepSeek-Prover-V1.5-RL run by llama.cpp on Metal.
+Do the smoke test (`MAC_SMOKE.md`, steps 1 to 6) first.
+
+```bash
+scripts/mac_overnight.sh --estimate     # the plan in hours; runs nothing
+scripts/mac_overnight.sh                # the run; rerun the same command to resume
+scripts/mac_overnight.sh --status       # from another terminal or over SSH
+scripts/mac_overnight.sh --report       # a report from what has finished so far
+```
+
+It runs miniF2F test under `lm`, `area_l0.3` and `random_l0.3`, interleaved per problem in the
+fixed order, with `configs/search_eval_mac_overnight.yaml`: 12 expansions of 8 samples and 180 s
+per problem, one worker. It keeps the Mac awake with `caffeinate`, logs one line per finished
+problem to `results/mac_overnight/logs/`, and writes `results/mac_overnight/report/` at the end.
+It removes API and AWS credentials from the run's environment and never calls either.
+
+The area conditions need a saved Markov model: `results/pilot3/msm` by default (from
+`markov-lean pilot` on the Mac), or `MSM_DIR=<a msm folder you produced>`. The script stops
+before any compute if it is missing, and so does `search-eval` for any prior that does not load.
+
+### Plans and what they can detect
+
+| plan | command | problems | time | detectable gain |
+|---|---|---|---|---|
+| one night | `PLAN=night scripts/mac_overnight.sh` | about 110 (80 to 115) | 12 h | about 9 points (9 to 11) |
+| all of miniF2F test | `scripts/mac_overnight.sh` (`PLAN=full`, the default) | 244 | about 26 h expected, 37 h at most, plus pauses | about 6 points (4.5 to 7) |
+
+Time: about 15 s an expansion on the M2 (8 samples at roughly 15 to 30 tokens a second, plus Lean)
+and 3 conditions a problem. A problem that is solved early takes a minute or less; one that fails
+uses its 180 s. The estimate switches to measured times once problems finish. `PLAN=full` stops
+after `HOURS=48` in all; a stopped run is a prefix of the fixed order, so `PLAN=night` tonight and
+the same command again tomorrow is the same run as `PLAN=full`.
+
+Detectable gain: the smallest true gain of the area prior over `lm` in solve rate that an exact
+two-sided McNemar test at alpha 0.05 finds with 80% power, assuming 10% of problems are solved by
+one condition and not the other (the range is for 6% to 15%). Every condition sees the same tactic
+samples at a goal state, so only problems where reordering changes the outcome disagree. With 6%
+disagreeing, one night is too small for any gain to reach 80% power. `report.md` recomputes this
+from the disagreement it observes, in its "Detectable effect" table, so after the first night you
+know which plan you need. The `random_l0.3` comparison uses the same test with Holm correction.
+
+Other conditions (`area_l0.1`, `area_l0.6`) are in the config: add them with
+`CONDITIONS="lm area_l0.3 random_l0.3 area_l0.6"` once the core comparison is done; finished
+problems are skipped. PutnamBench (`BENCHMARK=putnam`) is runnable but not worth it at this budget:
+nearly every problem fails and uses its full 180 s under every condition (9 minutes a problem),
+which gives almost no disagreeing problems and so no power.
+
+These numbers are for this model and budget only. Pass rates from the Mac are not comparable with
+the vLLM runs on EC2 or with published numbers; `search-report` puts that warning at the top of
+`report.md`, in every `.tex` file and in `LOCAL_MODEL.txt` whenever a run used llama.cpp.
+
+### Sharing the Mac with GitHub runner jobs
+
+The Mac also hosts self-hosted GitHub Actions runners. The search holds about 9 GB, so the script
+runs it under `markov_lean.mac_guard`, which gives that memory back on its own:
+
+* it stops the search cleanly (as Ctrl-C would) when a runner job starts (a `Runner.Worker`
+  process; the always-on `Runner.Listener` doesn't count), when macOS memory pressure reaches
+  *warn*, when available memory falls under `MIN_FREE_GB` (1) or when swap grows by more than
+  `MAX_SWAP_GROWTH_GB` (1.5) since the search started. Stopping, not pausing, is what frees the
+  memory. The problem in flight is lost and rerun; finished problems are kept.
+* it starts the search again once no runner job has run for `COOLDOWN` seconds (120), pressure is
+  normal and `RESUME_FREE_GB` (10) is available. Until then it waits and says why, in the log and in
+  `--status`.
+* it gives up after 3 failed starts in a row (an error in the search itself), and stops after
+  `HOURS` in all, pauses included.
+* guarded jobs take turns through one lock file, so the search and the local judge
+  (`scripts/mac_local_judge.sh`, about 7 GB) never run side by side.
+
+It changes no system setting and never touches the runner. `YIELD_TO_RUNNER=0` keeps only the
+memory checks. `python -m markov_lean.mac_guard --check` prints what it reads right now.
+
+To have the run start again after a restart or a logout, an optional launchd agent:
+
+```bash
+scripts/mac_overnight.sh --agent-plist > ~/Library/LaunchAgents/com.markov-lean.search.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.markov-lean.search.plist
+# remove: launchctl bootout gui/$(id -u)/com.markov-lean.search && rm ~/Library/LaunchAgents/com.markov-lean.search.plist
+```
+
+It starts the script at login and again if it crashes, not after it finishes.
+
 ## Tests
 
-`tests/test_search_eval.py` and `tests/test_search_report.py` run in CI with no GPU, Lean or
-network: Lean is a fake REPL and the prover a fixed table.
+`tests/test_search_eval.py`, `tests/test_search_report.py`, `tests/test_mac_overnight.py` and
+`tests/test_mac_guard.py` run in CI with no GPU, Lean or network: Lean is a fake REPL, the prover a
+fixed table and the guard's machine readings are faked.

@@ -72,6 +72,20 @@ Other options: `--all` labels every proof; `--model llama3.1:8b-instruct-q4_K_M`
 its own folder; `--host` points at another Ollama server; `--num-ctx` changes the context window. See
 `markov-lean local-judge label --help`.
 
+### Next to the GitHub runners
+
+`scripts/mac_local_judge.sh` runs `local-judge label` with the same options under the memory guard
+the search uses (see "Sharing the Mac with GitHub runner jobs" in `docs/search_eval.md`): it stops
+the judge cleanly when a runner job starts or memory gets tight, runs `ollama stop <model>` so
+Ollama gives the memory back (it would otherwise keep the model loaded for 30 minutes), and starts
+it again once there is room (`RESUME_FREE_GB`, 8 by default). The judge resumes where it stopped.
+It never runs at the same time as a guarded search.
+
+```
+scripts/mac_local_judge.sh --run results/pilot3 --sample-steps 500
+scripts/mac_local_judge.sh --status
+```
+
 ## Prompt versions
 
 `--prompt v1` (the default) is the API judges' prompt, unchanged, which is what a cross-family agreement
