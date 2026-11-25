@@ -1,5 +1,8 @@
 # Search smoke test on the Mac Mini
 
+Tonight's run, from Lean setup to the overnight search, is one command: `scripts/mac_tonight.sh`
+(checklist in `MAC_TONIGHT.md`). The steps below are what it runs.
+
 A 10-problem miniF2F run of the search evaluation on the Mac Mini (M2, 16 GB), with a small
 budget, before any GPU time. The prover is a 4-bit GGUF of DeepSeek-Prover-V1.5-RL that
 llama.cpp runs inside the search process on the M2's GPU (Metal), in place of the vLLM
