@@ -1,8 +1,13 @@
-% TODO: write once the pilot results are in. Keep to about 150 words.
-Formal proofs in Lean are sequences of tactic steps that transform goal states.
-We ask whether these trajectories move between areas of mathematics in a regular,
-low-dimensional way. We cluster goal states into microstates, fit a Markov state
-model over proof steps, and coarse-grain it into metastable sets with PCCA+.
-We compare the resulting sets with Mathematics Subject Classification (MSC 2020)
-labels from LLM judges, and use the area model as a prior in proof search.
-\todo{headline numbers: NMI against judges, implied timescales, search gains.}
+% DRAFT (Claude): awaits the author's rewrite. Fill the numbers once the pilot
+% and search runs are in. ICML asks for one paragraph of 4-6 sentences.
+A Lean proof is a sequence of tactic steps, each of which turns one goal state
+into the next. We ask whether these trajectories move between areas of
+mathematics in a regular way that a small model can capture. We embed goal
+states, cluster them into microstates, fit a Markov state model with proof
+steps as the unit of time, and coarse-grain it into metastable sets with PCCA+.
+Against MSC 2020 labels from two LLM judges, the metastable sets reach an NMI
+of \todo{x.xx}, compared with \todo{x.xx} for a baseline that labels each proof
+by its Mathlib folder, and the slowest area-switching process relaxes over
+about \todo{n} tactic steps. Used as a prior in best-first search with
+DeepSeek-Prover-V1.5, the area model changes the number of problems solved
+under a fixed budget by \todo{x} on miniF2F and \todo{x} on ProofNet.
