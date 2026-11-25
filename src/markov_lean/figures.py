@@ -112,7 +112,13 @@ def paper_rc(font_scale: float = 0.9) -> dict:
     rc.update({
         "font.family": "sans-serif",
         "font.sans-serif": list(SANS_SERIF),
-        "mathtext.fontset": "dejavusans",
+        # math in the same sans-serif as the text; symbols the font lacks
+        # (arrows, Greek in some fonts) fall back to STIX Sans
+        "mathtext.fontset": "custom",
+        "mathtext.rm": "sans",
+        "mathtext.it": "sans:italic",
+        "mathtext.bf": "sans:bold",
+        "mathtext.fallback": "stixsans",
         "pdf.fonttype": 42,
         "ps.fonttype": 42,
         "axes.prop_cycle": cycler(color=list(CATEGORICAL)),
@@ -621,7 +627,11 @@ def save_pdf(fig, path: str | Path, **kwargs) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     kwargs.setdefault("bbox_inches", "tight")
     matplotlib, _ = _plt()
-    with matplotlib.rc_context({"pdf.fonttype": 42}):  # embed TrueType, never Type 3
+    # Font families resolve when the figure is drawn, so save under the paper's
+    # font settings too; otherwise text falls back to the global default font.
+    rc = {k: v for k, v in paper_rc().items() if k.startswith(("font.family", "font.sans-serif", "mathtext."))}
+    rc["pdf.fonttype"] = 42  # embed TrueType, never Type 3
+    with matplotlib.rc_context(rc):
         fig.savefig(path, format="pdf", **kwargs)
     return path
 
