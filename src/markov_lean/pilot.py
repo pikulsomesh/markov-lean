@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 
 from . import evaluate as ev
-from .msm import MSMConfig, MSMResult
+from .msm import MSMConfig, MSMResult, map_microstates
 from .msm import run as run_msm
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -144,8 +144,26 @@ def consensus_labels(labels: pd.DataFrame, judges: list[str] | None = None) -> t
 # --------------------------------------------------------------------------- scoring
 
 
+def macrostate_sweep(res: MSMResult, ks: list[int]) -> dict[int, np.ndarray]:
+    """PCCA+ macrostates of the fitted model for each k, one value per row of ``res.assignments``.
+
+    The gate is called on the configured ``n_macrostates``; the sweep shows how
+    agreement with the labels changes with k, so the paper can report the curve.
+    """
+    n_micro = res.centers.shape[0]
+    out: dict[int, np.ndarray] = {}
+    for k in sorted(set(int(k) for k in ks)):
+        if k < 2 or k > res.msm.n_states:
+            continue
+        pcca = res.msm.pcca(k)
+        macro, _, _ = map_microstates(n_micro, res.connected, pcca.assignments, pcca.memberships, res.centers,
+                                      "nearest")
+        out[k] = macro[res.microstates]
+    return out
+
+
 def score(res: MSMResult, steps: pd.DataFrame, labels: pd.DataFrame, label_col: str,
-          topk: list[int], gate_nmi: float) -> dict:
+          topk: list[int], gate_nmi: float, sweep: list[int] | None = None) -> dict:
     """Macrostates and the folder baseline against the same labelled steps, then gate 1."""
     a = res.assignments
     lab = labels[KEY + [label_col]].copy()
@@ -167,6 +185,12 @@ def score(res: MSMResult, steps: pd.DataFrame, labels: pd.DataFrame, label_col: 
     nxt = {f"top{k}": ev.next_area_topk(a, lab, label_col, res.coarse_T, k=k, lag=res.lag) for k in topk}
     for v in nxt.values():
         v.pop("macrostate_to_label", None)
+    by_k = {}
+    if sweep:
+        rows = a[KEY].reset_index(drop=True)
+        for k, pred in macrostate_sweep(res, sweep).items():
+            m = rows.assign(_pred=pred).merge(lab, on=KEY, how="inner")
+            by_k[k] = ev.agreement(m["_pred"], m[label_col])
     folder_nmi = folder["nmi"] if np.isfinite(folder["nmi"]) else 0.0
     passed = bool(np.isfinite(macro["nmi"]) and macro["nmi"] >= gate_nmi and macro["nmi"] > folder_nmi)
     return {
@@ -176,9 +200,11 @@ def score(res: MSMResult, steps: pd.DataFrame, labels: pd.DataFrame, label_col: 
         "microstates": micro,
         "folder_baseline": folder,
         "next_area": nxt,
+        "macrostate_sweep": {str(k): v for k, v in by_k.items()},
         "gate1": {
             "passed": passed,
-            "rule": f"macrostate NMI >= {gate_nmi} and above the folder baseline",
+            "rule": f"macrostate NMI >= {gate_nmi} and above the folder baseline, at the configured k",
+            "k": int(res.report["n_macrostates"]),
             "macrostate_nmi": macro["nmi"],
             "folder_nmi": folder["nmi"],
             "threshold": gate_nmi,
@@ -203,7 +229,8 @@ def run(config: dict, out_dir: Path | str, steps: pd.DataFrame | None = None, ve
     steps = sample_proofs(steps, data.get("max_proofs"), int(data.get("min_steps", 2)), seed)
     if steps.empty:
         raise ValueError("no proofs left after filtering; lower data.min_steps")
-    say(f"pilot: {steps['proof_id'].nunique()} proofs, {len(steps)} steps")
+    lens = steps.groupby("proof_id").size()
+    say(f"pilot: {len(lens)} proofs, {len(steps)} steps, median proof length {lens.median():g} steps")
 
     res = run_msm(steps, msm_config(config.get("msm")))
     res.save(out / "msm")
@@ -219,11 +246,12 @@ def run(config: dict, out_dir: Path | str, steps: pd.DataFrame | None = None, ve
         "msm_checks_failed": failed,
     }
     topk = list(ecfg.get("topk", [1, 3]))
+    sweep = list(ecfg.get("macrostate_sweep", []))
     gate_nmi = float(ecfg.get("gate_nmi", 0.15))
 
     if "true_area" in steps.columns and steps["true_area"].notna().any() and data.get("source") == "synthetic":
         report["eval"] = score(res, steps, steps.assign(proof_id=steps["proof_id"].astype(str)),
-                               "true_area", topk, gate_nmi)
+                               "true_area", topk, gate_nmi, sweep)
         report["labels"] = "true_area (synthetic)"
     else:
         judge_dir = out / "judge"
@@ -232,7 +260,7 @@ def run(config: dict, out_dir: Path | str, steps: pd.DataFrame | None = None, ve
             labels = pd.read_parquet(labels_path)
             cons, agree = consensus_labels(labels, jcfg.get("judges"))
             report["judge_agreement"] = agree
-            report["eval"] = score(res, steps, cons, "msc", topk, gate_nmi)
+            report["eval"] = score(res, steps, cons, "msc", topk, gate_nmi, sweep)
             report["labels"] = str(labels_path)
         else:
             info = write_judge_sample(steps, int(jcfg.get("sample_proofs", 1000)), seed, judge_dir,
@@ -245,8 +273,10 @@ def run(config: dict, out_dir: Path | str, steps: pd.DataFrame | None = None, ve
     (out / "pilot_report.json").write_text(json.dumps(report, indent=2, default=str))
     if "eval" in report:
         g = report["eval"]["gate1"]
-        say(f"gate 1 {'PASSED' if g['passed'] else 'FAILED'}: macrostate NMI {g['macrostate_nmi']:.3f}, "
+        say(f"gate 1 {'PASSED' if g['passed'] else 'FAILED'} at k={g['k']}: macrostate NMI {g['macrostate_nmi']:.3f}, "
             f"folder NMI {g['folder_nmi']:.3f}, threshold {g['threshold']}")
+        for k, v in report["eval"]["macrostate_sweep"].items():
+            say(f"  k={k}: NMI {v['nmi']:.3f}, ARI {v['ari']:.3f}")
         return 0 if g["passed"] else 1
     return 0
 
