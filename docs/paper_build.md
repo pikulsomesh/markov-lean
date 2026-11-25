@@ -21,6 +21,7 @@ Every input is optional. A `--<name> PATH` flag picks a folder instead of search
 | `--full` | `markov-lean full` | LeanDojo counts of the full fit (replacing the pilot's), Workbook and PutnamBench counts from `project/summary.parquet` |
 | `--msm` | `<full>/msm`, else `<pilot>/msm` | `implied_timescales`, `transition_matrix`, `chapman_kolmogorov`, lag, m, slowest timescale |
 | `--search` | `markov-lean search-eval` (`results/search_eval`) | table 3, `search_ablation`, seeds, per-benchmark gain of `--main-condition` (default `full`) over `--baseline` (default `lm`) |
+| `<search>/report` | `markov-lean search-report --runs <search>` | its `.tex` tables and `fig_*.pdf` figures, copied as `search_<name>` |
 | `--robustness` | `markov-lean robustness` (`<pilot>/robustness`) | the random-partition row of table 2, the judge ceiling; its figures are copied as `robustness_<name>.pdf` |
 | `--bridges` | `markov-lean bridges` (`results/bridges`) | `bridges.pdf`, copied as is |
 
@@ -35,7 +36,7 @@ Everything goes to `paper/figures/`:
 | `<figure>.pdf` | `\maybefigure{<figure>}` |
 | `table_data.tex`, `table_areas.tex`, `table_search.tex` | `\resultstable{<name>}` inside each table environment (the caption and label stay in the section file) |
 | `results_macros.tex` | `paper/results.tex`, input by `main.tex` after `macros.tex` |
-| `bridges.pdf`, `robustness_<name>.pdf` | nothing yet; there for the text to pick up |
+| `bridges.pdf`, `robustness_<name>.pdf`, `search_<name>.tex` / `.pdf` | nothing yet; there for the text to pick up |
 
 `paper/figures/preview/` holds the preview of each table and of the macros (red dashes only). The command rewrites them on every run so they match the code; `--redraw-previews` also redraws the preview figures with `scripts/preview_figures.py`. A table or macros file with no real number is not written, and an old generated one is removed, so the PDF never shows stale numbers as real.
 

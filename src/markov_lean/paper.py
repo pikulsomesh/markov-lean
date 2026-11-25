@@ -25,7 +25,9 @@ Outputs in ``<paper>/figures/`` (what ``\\maybefigure`` and ``\\resultstable`` r
   ``tabular`` bodies, with a red dash (``\\tbd``) in every cell still waiting on a run;
 * ``results_macros.tex``: ``\\newcommand`` for every headline number the text
   uses (``\\resMacroNMI`` and so on), a red dash where the number is missing;
-* extras that the text does not use yet: ``bridges.pdf`` and ``robustness_<name>.pdf``.
+* extras that the text does not use yet, copied as they are: ``bridges.pdf``,
+  ``robustness_<name>.pdf``, and every ``.tex`` table and ``.pdf`` figure of
+  ``markov-lean search-report`` in ``<search>/report`` as ``search_<name>``.
 
 The preview versions of the tables and macros (red dashes only) are rewritten in
 ``<paper>/figures/preview/`` on every run, so they always match the code; the
@@ -368,11 +370,12 @@ def table_areas_tex(cells: dict[str, tuple[str, str]], m: str = "10") -> str:
 
 
 def table_search_preview_tex() -> str:
-    """Table 3 (``tab:search``) before any search run: the rows the text plans, all dashes."""
+    """Table 3 (``tab:search``) before any search run: the rows the text plans, the benchmarks
+    ``configs/search_eval.yaml`` runs, all dashes."""
     rows = [r"LM only ($\lambda = 0$)", r"Area prior ($\lambda = 0.3$)", r"\quad without dynamics term",
             r"\quad without visit term ($\alpha = 0$)", r"\quad without stall term ($\beta = 0$)",
             "Random partition, same sizes"]
-    lines = [r"\begin{tabular}{lcc}", r"  \toprule", r"  Prior & miniF2F & ProofNet \\", r"  \midrule"]
+    lines = [r"\begin{tabular}{lcc}", r"  \toprule", r"  Prior & miniF2F & PutnamBench \\", r"  \midrule"]
     lines += [f"  {r} & \\tbd & \\tbd \\\\" for r in rows]
     lines += [r"  \bottomrule", r"\end{tabular}"]
     return "\n".join(lines) + "\n"
@@ -598,6 +601,11 @@ def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, 
                   n_boot: int) -> bool:
     if src.search is None:
         return False
+    report = src.search / "report"  # `markov-lean search-report --runs <search>` writes here by default
+    if report.is_dir():
+        for f in sorted(list(report.glob("*.tex")) + list(report.glob("*.pdf"))):
+            stem = f.stem[4:] if f.stem.startswith("fig_") else f.stem
+            b.copies[f"search_{stem}{f.suffix}"] = (f, _rel(f, src.results.parent))
     df = search_frame(src.search)
     if df.empty:
         return False
@@ -758,7 +766,7 @@ def write(b: Build, paper: str | Path, stamp: str | None = None) -> list[Item]:
             items.append(Item(name, "number", "preview"))
     for dest, (srcfile, source) in b.copies.items():
         shutil.copyfile(srcfile, out / dest)
-        items.append(Item(dest[:-4], "extra", "real", source, "not used by the text yet"))
+        items.append(Item(dest, "extra", "real", source, "not used by the text yet"))
     return items
 
 
@@ -799,7 +807,7 @@ def run(results: str | Path, paper: str | Path, *, dry_run: bool = False, redraw
         items += [Item(n, "table", "real" if b.tables[n][2] else "preview", b.tables[n][1]) for n in TABLES]
         items += [Item(n, "number", "real" if n in b.macros else "preview", b.macros.get(n, ("", ""))[1],
                        b.macros.get(n, ("", ""))[0]) for n in b.macro_names]
-        items += [Item(d[:-4], "extra", "real", s, "not used by the text yet") for d, (_, s) in b.copies.items()]
+        items += [Item(d, "extra", "real", s, "not used by the text yet") for d, (_, s) in b.copies.items()]
         _close()
         say("dry run, nothing written:")
     else:

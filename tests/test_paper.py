@@ -106,6 +106,10 @@ def make_results(root: Path, *, search: bool = True) -> Path:
     shutil.copyfile(REPO / "paper" / "figures" / "preview" / "area_flow.pdf", root / "bridges" / "bridges.pdf")
     if search:
         _write_search(root / "search_eval")
+        rep = root / "search_eval" / "report"  # what `markov-lean search-report` leaves next to the runs
+        rep.mkdir()
+        (rep / "paired.tex").write_text("\\begin{tabular}{l}\\end{tabular}\n")
+        shutil.copyfile(REPO / "paper" / "figures" / "preview" / "area_flow.pdf", rep / "fig_budget.pdf")
     return root
 
 
@@ -139,7 +143,8 @@ def test_every_input_fills_figures_tables_and_numbers(tmp_path, paper_dir):
     for name in P.FIGURES:
         assert items[("figure", name)].status == "real", name
         assert (figs / f"{name}.pdf").stat().st_size > 1000
-    assert items[("extra", "bridges")].status == "real" and (figs / "bridges.pdf").exists()
+    assert items[("extra", "bridges.pdf")].status == "real" and (figs / "bridges.pdf").exists()
+    assert (figs / "search_paired.tex").exists() and (figs / "search_budget.pdf").exists()
     assert (figs / "robustness_baselines_nmi.pdf").exists()
 
     v = macros(figs / "results_macros.tex")
