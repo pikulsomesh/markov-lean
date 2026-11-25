@@ -82,7 +82,7 @@ def make_all(rng) -> list[tuple[str, object]]:
     out.append(("area_flow", F.area_flow(F.area_transitions(assign), top=10)))
 
     # search: problems solved per seed, two benchmarks, three priors
-    base = {"miniF2F": 48.0, "ProofNet": 21.0}
+    base = {"miniF2F": 48.0, "PutnamBench": 4.0}
     lift = {"LM prior": 0.0, "+ area prior": 3.0, "+ random partition": 0.5}
     res = [(m, b, base[b] + d + rng.normal(0, 1.2))
            for b in base for m, d in lift.items() for _ in range(5)]

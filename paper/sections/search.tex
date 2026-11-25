@@ -68,14 +68,16 @@ progress threshold, and how $\lambda$ was chosen (validation split only).}
 \end{figure}
 
 \paragraph{Ablations.}
-\todo{each factor of $g$ switched off in turn; $\lambda \in \{0, 0.1, 0.3,
+\todo{each factor of $g$ turned on alone, then all three together; $\lambda \in \{0, 0.1, 0.3,
 0.5\}$; a random partition with the same area sizes, to separate the
 effect of the areas from that of reweighting itself. Report results on the
-miniF2F (244) and ProofNet (186) test splits.}
+miniF2F test split (244) and PutnamBench.}
 
 \begin{table}[t]
   \caption{Problems solved (\%) under the same budget, mean over
-  \resSearchSeeds{} seeds. Each ablation row switches off one factor of $g$.
+  \resSearchSeeds{} seeds. Each indented row turns on one factor of $g$ alone,
+  and the area prior row turns on all three. Random scores keeps the mixing
+  rule and weight with random scores in place of the area scores.
   \todo{fill from the search runs.}}
   \label{tab:search}
   \centering\small
