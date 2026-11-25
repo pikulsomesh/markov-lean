@@ -42,7 +42,7 @@ KEY = ["benchmark", "condition", "seed", "proof_id"]
 COLUMNS = [
     "proof_id", "theorem", "source", "split", "solved", "stop_reason", "n_tactics",
     "expansions", "nodes", "elapsed", "proof", "benchmark", "condition", "seed",
-    "max_expansions", "wall_time", "root_area", "name_area",
+    "max_expansions", "wall_time", "root_area", "name_area", "backend", "model",
 ]
 DEFAULT_KS = (1, 2, 4, 8, 16, 32)
 
@@ -64,6 +64,10 @@ __all__ = [
     "fig_budget_gain",
     "fig_area_gain",
     "fig_effort",
+    "mcnemar_power",
+    "mcnemar_mde",
+    "detectable_effects",
+    "local_model_note",
     "write_report",
     "main",
 ]
@@ -251,6 +255,105 @@ def _mcnemar(only_a: int, only_b: int) -> float:
 
     n = only_a + only_b
     return 1.0 if n == 0 else float(binomtest(only_a, n, 0.5).pvalue)
+
+
+def mcnemar_power(n: int, discordance: float, gain: float, alpha: float = 0.05) -> float:
+    """Power of the exact two-sided McNemar test on ``n`` paired problems.
+
+    ``discordance`` is the share of problems the two conditions disagree on and ``gain``
+    the true difference in solve rates (``P(only cond) - P(only base)``). The number of
+    discordant problems is Binomial(n, discordance); given it, the test is exact
+    binomial at 1/2, and the count won by the condition is Binomial(D, (d + gain) / 2d).
+    """
+    from scipy.stats import binom
+
+    d, g = float(discordance), abs(float(gain))
+    if n <= 0 or d <= 0:
+        return 0.0
+    g = min(g, d)
+    q = (d + g) / (2 * d)
+    total = 0.0
+    for D in range(1, n + 1):
+        pd_ = binom.pmf(D, n, d)
+        if pd_ < 1e-12:
+            continue
+        k = np.arange(D + 1)
+        pv = np.minimum(1.0, 2 * np.minimum(binom.cdf(k, D, 0.5), binom.sf(k - 1, D, 0.5)))
+        total += pd_ * float(binom.pmf(k, D, q)[pv <= alpha].sum())
+    return total
+
+
+def mcnemar_mde(n: int, discordance: float, alpha: float = 0.05, power: float = 0.8,
+                step: float = 0.0025) -> float:
+    """Smallest gain in solve rate (a share, not points) that the exact McNemar test finds
+    with probability ``power`` on ``n`` problems; NaN when no gain up to ``discordance``
+    reaches it (too few problems disagree)."""
+    d = float(discordance)
+    for g in np.arange(step, d + step / 2, step):
+        if mcnemar_power(n, d, min(g, d), alpha) >= power:
+            return float(min(g, d))
+    return float("nan")
+
+
+def detectable_effects(paired: pd.DataFrame, alpha: float = 0.05, power: float = 0.8) -> pd.DataFrame:
+    """For each paired comparison, the gain it can detect at its size and observed discordance."""
+    rows = []
+    for r in paired.to_dict("records"):
+        n = int(r["n_common"])
+        disc = (r["only_cond"] + r["only_base"]) / n if n else float("nan")
+        mde = mcnemar_mde(n, disc, alpha, power) if n and disc > 0 else float("nan")
+        rows.append({"benchmark": r["benchmark"], "condition": r["condition"], "n_common": n,
+                     "discordance": disc, "mde": mde})
+    return pd.DataFrame(rows, columns=["benchmark", "condition", "n_common", "discordance", "mde"])
+
+
+def _runs_records(summary_paths: Iterable[Path]) -> list[dict]:
+    """``runs.jsonl`` lines from the folders above each run (``<out>/runs.jsonl``)."""
+    seen: set[Path] = set()
+    recs: list[dict] = []
+    for sp in summary_paths:
+        for d in list(Path(sp).resolve().parents)[1:4]:
+            f = d / "runs.jsonl"
+            if f in seen or not f.is_file():
+                continue
+            seen.add(f)
+            for line in f.read_text().splitlines():
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(rec, dict):
+                    recs.append(rec)
+    return recs
+
+
+def local_model_note(df: pd.DataFrame, roots: str | Path | Sequence[str | Path] = ()) -> str | None:
+    """A warning when any run used the local llama.cpp prover (the Mac), else None.
+
+    Read from each summary line's ``backend`` and, for older lines, from ``runs.jsonl``.
+    """
+    local = "backend" in df.columns and (df["backend"].astype(str) == "llama_cpp").any()
+    models = sorted({str(m) for m in df.get("model", pd.Series(dtype=object)).dropna()})
+    if isinstance(roots, (str, Path)):
+        roots = [roots]
+    paths = [p for r in roots for p in _summary_paths(Path(r))]
+    for rec in _runs_records(paths):
+        prover = rec.get("prover") or {}
+        if prover.get("backend") == "llama_cpp":
+            local = True
+            if prover.get("model_path"):
+                models = sorted(set(models) | {os.path.basename(str(prover["model_path"]))})
+    if not local:
+        return None
+    exp = pd.to_numeric(df["max_expansions"], errors="coerce").dropna()
+    wall = pd.to_numeric(df["wall_time"], errors="coerce").dropna()
+    budget = ""
+    if len(exp) and len(wall):
+        budget = f" with a small budget ({int(exp.max())} expansions, {wall.max():.0f} s per problem)"
+    model = f" ({', '.join(models)})" if models else ""
+    return (f"Local runs: a quantized prover{model} run by llama.cpp on one machine{budget}. "
+            "Pass rates are not comparable with the vLLM runs on EC2 or with published numbers; "
+            "only the paired comparisons between conditions within these runs are meaningful.")
 
 
 def paired_compare(df: pd.DataFrame, baseline: str = "lm", n_boot: int = 2000, seed: int = 0,
@@ -1094,8 +1197,11 @@ def _pick_area_col(df: pd.DataFrame, area_col: str | None) -> str | None:
 def _report_md(table: pd.DataFrame, paired: pd.DataFrame, areas: pd.DataFrame | None,
                ks: Sequence[int], baseline: str, area_col: str | None, n_boot: int,
                gains: pd.DataFrame | None = None, stats: pd.DataFrame | None = None,
-               effort: pd.DataFrame | None = None) -> str:
+               effort: pd.DataFrame | None = None, note: str | None = None,
+               detect: pd.DataFrame | None = None) -> str:
     parts = ["# Search report", ""]
+    if note:
+        parts += [f"> **{note}**", ""]
     headers = ["benchmark", "condition", "problems", "seeds"] + [f"pass@{k} (%)" for k in ks]
     headers += ["stmt errors", "mean exp. (solved)", "median time (s)"]
     rows = []
@@ -1123,6 +1229,15 @@ def _report_md(table: pd.DataFrame, paired: pd.DataFrame, areas: pd.DataFrame | 
                 for r in paired.to_dict("records")]
         parts += [_md_table(["benchmark", "condition", "n", "rate (%)", "base (%)", "diff (pts)", "p boot",
                              "only cond/base", "p McNemar", "p Holm"], rows), ""]
+    if detect is not None and not detect.empty:
+        parts += ["## Detectable effect", "",
+                  "The smallest gain in solve rate each comparison would find with 80% power (exact McNemar, "
+                  "two-sided, alpha 0.05, no Holm correction), at its number of problems and the share of "
+                  "problems the two conditions disagree on so far. A dash: too few problems disagree for "
+                  "any gain to reach 80%.", ""]
+        rows = [[r["benchmark"], r["condition"], r["n_common"], _pct(r["discordance"]), _pct(r["mde"])]
+                for r in detect.to_dict("records")]
+        parts += [_md_table(["benchmark", "condition", "n", "disagree (%)", "detectable gain (pts)"], rows), ""]
     if areas is not None and not areas.empty:
         parts += [f"## pass@1 by area (`{area_col}`)", ""]
         rows = [[r["benchmark"], r["area"], r["condition"], r["n"], _pct(r["pass@1"], r["pass@1_lo"], r["pass@1_hi"])]
@@ -1225,9 +1340,14 @@ def write_report(root: str | Path | Sequence[str | Path], out_dir: str | Path, b
         if frame is not None:
             paths[name] = out / f"{name}.csv"
             frame.to_csv(paths[name], index=False)
+    note = local_model_note(df, root)
+    detect = detectable_effects(paired)
+    paths["detectable"] = out / "detectable.csv"
+    detect.to_csv(paths["detectable"], index=False)
     paths["report"] = out / "report.md"
     paths["report"].write_text(_report_md(table, paired, areas, ks, baseline, acol, n_boot,
-                                          gains=gains, stats=stats, effort=effort))
+                                          gains=gains, stats=stats, effort=effort, note=note,
+                                          detect=detect))
     texts = {"latex": ("pass_at_k.tex", _latex_table(table, conds, labels=tex)),
              "latex_paired": ("paired.tex", _latex_paired(paired, tex)),
              "latex_stats": ("search_stats.tex", _latex_stats(stats, effort, tex))}
@@ -1237,7 +1357,10 @@ def write_report(root: str | Path | Sequence[str | Path], out_dir: str | Path, b
         texts["latex_area_gain"] = ("by_area_gain.tex", _latex_area_gain(gains, conds, tex))
     for name, (fname, text) in texts.items():
         paths[name] = out / fname
-        paths[name].write_text(text)
+        paths[name].write_text((f"% {note}\n" if note else "") + text)
+    if note:
+        paths["local_note"] = out / "LOCAL_MODEL.txt"
+        paths["local_note"].write_text(note + "\n")
 
     if figures:
         import matplotlib.pyplot as plt
@@ -1305,6 +1428,8 @@ def main(argv: list[str] | None = None) -> int:
                          n_boot=args.n_boot, seed=args.seed, figures=not args.no_figures, labels=labels,
                          bench_labels=bench_labels)
     print(paths["report"])
+    if "local_note" in paths:
+        print(paths["local_note"].read_text().strip())
     table = pd.read_csv(paths["pass_at_k"])
     show = table[["benchmark", "condition", "n_problems", "n_seeds", "pass@1", "pass@1_lo", "pass@1_hi"]].copy()
     for c in ("pass@1", "pass@1_lo", "pass@1_hi"):

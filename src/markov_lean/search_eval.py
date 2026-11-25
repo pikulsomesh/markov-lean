@@ -513,6 +513,10 @@ class Worker:
         self._priors: dict[tuple[str, int], Any] = {}
         self._area: Any = None
         self._area_failed = False
+        prover = cfg.search_config.get("prover") or {}
+        self.backend = str(prover.get("backend") or "vllm")
+        model = prover.get("model_path") if self.backend == "llama_cpp" else prover.get("model")
+        self.model = os.path.basename(str(model)) if model else None
 
     def close(self) -> None:
         for p in self._provers.values():
@@ -568,6 +572,8 @@ class Worker:
             "wall_time": self.search_cfg.wall_time,
             "root_area": self.root_area(root_state),
             "name_area": name_area(thm.name),
+            "backend": self.backend,
+            "model": self.model,
             "worker": self.wid,
             "finished_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         })
@@ -618,6 +624,19 @@ class _ListQueue:
         self.items.append(item)
 
 
+class _Sink:
+    """A results "queue" for the in-process path that handles each message as it arrives,
+    so a single-worker run (the Mac) logs one progress line per problem as it finishes."""
+
+    def __init__(self, handle: Any) -> None:
+        self.handle = handle
+
+    def put(self, item: Any) -> None:
+        kind, wid, payload = item
+        if kind != "exit":
+            self.handle(kind, wid, payload)
+
+
 def run_tasks(cfg: EvalConfig, problems: dict[str, list], tasks: list[Task], out: str | Path,
               workers: int = 1, deadline: float | None = None, hourly: float = 0.0,
               start_method: str = "spawn") -> dict:
@@ -646,10 +665,11 @@ def run_tasks(cfg: EvalConfig, problems: dict[str, list], tasks: list[Task], out
             log.warning("w%d stopped: %s", wid, stats["stopped"])
 
     if workers <= 1:
-        q, results = _ListQueue([*tasks, None]), _ListQueue()
-        _work(cfg, problems, out, 0, q, results, deadline)
-        for item in results.items:
-            handle(*item)
+        try:
+            _work(cfg, problems, out, 0, _ListQueue([*tasks, None]), _Sink(handle), deadline)
+        except KeyboardInterrupt:
+            log.warning("interrupted: finished problems are saved, rerun to resume")
+            stats["stopped"] = "interrupted"
         return stats
 
     import multiprocessing as mp
@@ -716,6 +736,36 @@ def _prover_record(search_config: dict) -> dict:
     return rec
 
 
+def rebuild_parquet(out: str | Path, benchmarks: Iterable[str], conditions: Iterable[str],
+                    seeds: Iterable[int]) -> None:
+    """Rewrite ``trace.parquet`` and ``steps.parquet`` from the JSONL logs of these runs."""
+    from markov_lean.search.runner import write_parquet
+
+    conditions, seeds = list(conditions), list(seeds)
+    for b in benchmarks:
+        for c in conditions:
+            for s in seeds:
+                d = run_dir(out, b, c, s)
+                if (d / "trace.jsonl").exists():
+                    write_parquet(d)
+
+
+def check_priors(cfg: EvalConfig, conditions: Sequence[str], seed: int = 0) -> None:
+    """Build each condition's prior once before any search runs.
+
+    With conditions interleaved per problem, an area prior that can't load (no saved
+    Markov model on this machine) would otherwise fail every one of its problems while the
+    other conditions keep running, which costs a night and leaves no comparison.
+    """
+    from markov_lean.search.runner import load_prior
+
+    for c in conditions:
+        try:
+            load_prior(cfg.prior_spec(c, seed))
+        except Exception as e:  # noqa: BLE001 - reported, then the run stops
+            raise SystemExit(f"condition {c!r}: the prior does not load ({e}). Nothing was run.") from e
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="markov-lean search-eval",
                                 description="Proof search on miniF2F / PutnamBench under prior conditions.")
@@ -737,6 +787,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--estimate", action="store_true", help="print the plan and cost, then exit")
     p.add_argument("--yes", action="store_true", help="run without the confirmation prompt")
     p.add_argument("--no-parquet", action="store_true", help="skip rebuilding Parquet files at the end")
+    p.add_argument("--parquet-only", action="store_true",
+                   help="only rebuild the Parquet files of the selected runs under --out, then exit")
     return p
 
 
@@ -770,6 +822,9 @@ def main(argv: list[str] | None = None) -> int:
         problems[b] = thms
 
     out = Path(args.out)
+    if args.parquet_only:
+        rebuild_parquet(out, benchmarks, conditions, seeds)
+        return 0
     tasks, skipped = plan_tasks(problems, conditions, seeds, out)
     counts = {}
     for b in benchmarks:
@@ -800,6 +855,7 @@ def main(argv: list[str] | None = None) -> int:
         if input("Run? [y/N] ").strip().lower() not in ("y", "yes"):
             return 1
 
+    check_priors(cfg, conditions, seeds[0])
     out.mkdir(parents=True, exist_ok=True)
     with open(out / "runs.jsonl", "a") as f:
         f.write(json.dumps({
@@ -812,14 +868,7 @@ def main(argv: list[str] | None = None) -> int:
     deadline = time.time() + max_hours * 3600 if max_hours is not None else None
     stats = run_tasks(cfg, problems, tasks, out, workers, deadline, est.hourly)
     if not args.no_parquet:
-        from markov_lean.search.runner import write_parquet
-
-        for b in benchmarks:
-            for c in conditions:
-                for s in seeds:
-                    d = run_dir(out, b, c, s)
-                    if (d / "trace.jsonl").exists():
-                        write_parquet(d)
+        rebuild_parquet(out, benchmarks, conditions, seeds)
     print(f"ran {stats['done']} problem runs, solved {stats['solved']}, errors {stats['errors']}"
           + (f", stopped: {stats['stopped']}" if stats["stopped"] else ""))
     print(f"Report: markov-lean search-report --runs {out}")

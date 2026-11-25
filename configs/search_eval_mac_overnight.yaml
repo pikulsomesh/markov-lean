@@ -1,0 +1,74 @@
+# Overnight search comparison on the Mac Mini (M2, 16 GB), without the EC2 GPU.
+# Same local prover as configs/search_eval_mac.yaml (a 4-bit GGUF of DeepSeek-Prover-V1.5-RL
+# run in-process by llama.cpp on Metal), sized to finish in one or two nights.
+#
+# What it can and can't show: conditions are compared paired, on the same problems and the
+# same tactic samples, so a difference between the LM prior and the area prior here is real
+# for this model and budget. Pass rates themselves are NOT comparable with the vLLM runs on
+# EC2 or with published numbers: the weights are quantized, the sampler is not vLLM's and
+# the budget is small. search-report says so on every table it writes from these runs.
+#
+# Run it with scripts/mac_overnight.sh (keeps the Mac awake, stops after HOURS, resumable).
+# Nothing here calls an API or AWS. Plans and power: docs/search_eval.md, "On the Mac Mini".
+
+base_config: configs/search.yaml   # lean settings (project lean/, REPL in ~/repl)
+
+prover:
+  backend: llama_cpp
+  model_path: ~/models/deepseek-prover-v1.5-rl_q4_k_m.gguf   # or MODEL=... / --model-path
+  n: 8                      # samples per expansion, drawn one after another
+  temperature: 1.0
+  top_p: 0.95
+  max_tokens: 128           # generation stops at the end of the first tactic anyway
+  n_ctx: 4096
+  n_gpu_layers: -1          # every layer on the GPU (Metal)
+
+lean:
+  timeout: 60
+  startup_timeout: 900
+
+budget:                     # the same for every problem and condition
+  max_expansions: 12        # about 15 s each on the M2 (8 samples plus Lean)
+  wall_time: 180
+  max_depth: 16
+
+seeds: [0]
+subset_seed: 0              # the fixed problem order; a stopped run is a prefix of it
+workers: 1                  # one model in memory; two would not fit in 16 GB with Lean
+
+msm_dir: results/pilot3/msm # the saved Markov model for the area conditions (or MSM_DIR=...)
+
+benchmarks:
+  minif2f:
+    path: data/raw/deepseek_benchmarks/minif2f.jsonl
+    format: jsonl
+    splits: [test]          # 244 problems
+  putnam:                   # optional: almost never solved at this budget, see the docs
+    path: data/raw/PutnamBench
+    format: putnam
+    glob: lean4/src/*.lean
+
+conditions:
+  lm:
+    factory: lm
+  area_l0.3:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  random_l0.3:
+    factory: markov_lean.search_eval:RandomPrior
+    kwargs: {lam: 0.3}
+  # Extra mixing weights, for a third night or once the core comparison is done.
+  area_l0.1:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.1, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  area_l0.6:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.6, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+
+cost:                       # local machine: no bill, so the estimate is in hours only
+  hourly_usd: 0.0
+  ebs_usd_per_hour: 0.0
+  startup_hours: 0.1        # model load and the first Mathlib import
+  sec_per_expansion: 15.0   # a guess; after the first problems the estimate uses measured times
+  parallel_efficiency: 1.0
+  expected_fraction: {minif2f: 0.7, putnam: 1.0}

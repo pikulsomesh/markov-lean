@@ -91,6 +91,9 @@ deepseek-ai/DeepSeek-Prover-V1.5-RL, under DeepSeek's model license. `--model-pa
 point at any other GGUF of the same model; Q4_K_M is the size that leaves room for Lean in
 16 GB.
 
+After the smoke test, the full comparison on the Mac (one night, or all 244 problems) is
+`scripts/mac_overnight.sh`: see "On the Mac Mini" in `docs/search_eval.md`.
+
 ## How long
 
 Step 6 has a ceiling of 10 problems × 180 s = 30 minutes of search, plus loading the model
