@@ -1,0 +1,1 @@
+{"name": "amc12a_2002_p6", "split": "valid", "informal_prefix": "", "formal_statement": "theorem amc12a_2002_p6 (n : \u2115) (h\u2080 : 0 < n) : \u2203 m, m > n :=", "goal": "n : \u2115\nh\u2080 : 0 < n\n\u22a2 \u2203 m, m > n", "header": "import Mathlib"}

@@ -1,0 +1,3 @@
+{"name": "exercise_1_1", "split": "valid", "informal_prefix": "/-- a -/", "formal_statement": "theorem exercise_1_1 (x : \u211d) : x = x :=", "goal": "x : \u211d\n\u22a2 x = x", "header": "import Mathlib"}
+{"name": "exercise_1_1", "split": "test", "informal_prefix": "/-- b -/", "formal_statement": "theorem exercise_1_1 (G : Type*) [Group G] : True :=", "goal": "G : Type u_1\ninst\u271d : Group G\n\u22a2 True", "header": "import Mathlib"}
+{"name": "exercise_2_3", "split": "test", "informal_prefix": "", "formal_statement": "theorem exercise_2_3 : True :=", "goal": "", "header": "import Mathlib"}

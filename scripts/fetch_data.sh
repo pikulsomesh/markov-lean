@@ -28,12 +28,24 @@ fetch_leandojo() {
 }
 
 fetch_workbook() {
-  # Hugging Face dataset internlm/Lean-Workbook, file lean_workbook.json (about 95 MB).
+  # Hugging Face dataset internlm/Lean-Workbook: wkbk_1009.parquet holds the tactic-level
+  # rows; lean_workbook.json (about 95 MB) holds about 140k problems as statements only.
   local dir="$RAW/lean_workbook"; mkdir -p "$dir"
-  if [ -s "$dir/lean_workbook.json" ]; then echo "workbook: already present"; return; fi
-  curl -fL --retry 4 -o "$dir/lean_workbook.json" \
-    "https://huggingface.co/datasets/internlm/Lean-Workbook/resolve/main/lean_workbook.json"
-  echo "workbook: ok ($(md5_of "$dir/lean_workbook.json"))"
+  local base="https://huggingface.co/datasets/internlm/Lean-Workbook/resolve/main"
+  for f in wkbk_1009.parquet lean_workbook.json; do
+    if [ -s "$dir/$f" ]; then echo "workbook $f: already present"; continue; fi
+    curl -fL --retry 4 -o "$dir/$f" "$base/$f"
+    echo "workbook $f: ok ($(md5_of "$dir/$f"))"
+  done
+}
+
+fetch_deepseek() {  # fetch_deepseek <minif2f|proofnet>
+  # DeepSeek-Prover-V1.5's Lean 4 copies, which carry the valid/test split and goal states.
+  local dir="$RAW/deepseek_benchmarks"; mkdir -p "$dir"
+  if [ -s "$dir/$1.jsonl" ]; then echo "$1: already present"; return; fi
+  curl -fL --retry 4 -o "$dir/$1.jsonl" \
+    "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-Prover-V1.5/main/datasets/$1.jsonl"
+  echo "$1: ok ($(wc -l < "$dir/$1.jsonl" | tr -d ' ') rows)"
 }
 
 clone() {  # clone <name> <url>
@@ -46,8 +58,8 @@ for s in $SOURCES; do
   case "$s" in
     leandojo) fetch_leandojo ;;
     workbook) fetch_workbook ;;
-    minif2f)  clone miniF2F-lean4 https://github.com/yangky11/miniF2F-lean4 ;;
-    proofnet) clone ProofNet-lean4 https://github.com/rahul3613/ProofNet-lean4 ;;
+    minif2f)  fetch_deepseek minif2f ;;
+    proofnet) fetch_deepseek proofnet ;;
     putnam)   clone PutnamBench https://github.com/trishullab/PutnamBench ;;
     *) echo "unknown source: $s (choose from: $ALL)" >&2; exit 2 ;;
   esac
