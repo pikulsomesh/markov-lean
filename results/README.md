@@ -49,6 +49,10 @@ Statistics (a move is a pair of steps `t` and `t + lag` in the same proof):
 
 The Phase 2 pilot and its gate 1 call; see `src/markov_lean/pilot.py`.
 
+## Into the paper — `markov-lean paper`
+
+`markov-lean paper` reads every folder above that exists and writes the paper's figures, tables and headline numbers into `paper/figures/`, keeping the synthetic preview for anything not yet run. See `docs/paper_build.md`.
+
 ## Results explorer — `markov-lean explore`
 
 ```bash

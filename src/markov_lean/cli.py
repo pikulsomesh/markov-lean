@@ -68,6 +68,16 @@ def _explore(rest: list[str]) -> int:
     return explore.main(rest)
 
 
+def cmd_paper(args: argparse.Namespace) -> int:
+    from markov_lean import paper
+
+    override = {k: getattr(args, k) for k in ("pilot", "synthetic", "full", "msm", "search", "robustness", "bridges")}
+    paper.run(args.results, args.paper, dry_run=args.dry_run, redraw_previews=args.redraw_previews,
+              main_condition=args.main_condition, baseline=args.baseline, flow_areas=args.flow_areas,
+              strict=args.strict, **override)
+    return 0
+
+
 def _search_eval(rest: list[str]) -> int:
     from markov_lean import search_eval
 
@@ -176,6 +186,20 @@ def main(argv: list[str] | None = None) -> int:
                     help="add a steps parquet (e.g. a search run's steps.parquet); repeatable")
     pr.add_argument("--jobs", type=int, default=None)
     pr.set_defaults(func=cmd_project)
+
+    pa = sub.add_parser("paper", help="rebuild the paper's figures, tables and numbers from the results that exist")
+    pa.add_argument("--results", default=str(ROOT / "results"), help="folder holding the run outputs")
+    pa.add_argument("--paper", default=str(ROOT / "paper"), help="paper folder (outputs go to <paper>/figures)")
+    for name in ("pilot", "synthetic", "full", "msm", "search", "robustness", "bridges"):
+        pa.add_argument(f"--{name}", default=None, help=f"use this {name} folder instead of searching --results")
+    pa.add_argument("--main-condition", default="full", help="search condition reported as the area prior")
+    pa.add_argument("--baseline", default="lm", help="search condition reported as the LM prior alone")
+    pa.add_argument("--flow-areas", choices=["auto", "judge", "macrostate"], default="auto",
+                    help="areas in the flow figure: judge MSC codes once labelled (auto), or macrostates")
+    pa.add_argument("--redraw-previews", action="store_true", help="redraw every synthetic preview figure")
+    pa.add_argument("--dry-run", action="store_true", help="say what would be real; write nothing")
+    pa.add_argument("--strict", action="store_true", help="stop on an input that fails to load")
+    pa.set_defaults(func=cmd_paper)
 
     for name, (_, help_) in PASSTHROUGH.items():
         sub.add_parser(name, help=help_ + "; see `markov-lean " + name + " --help`")

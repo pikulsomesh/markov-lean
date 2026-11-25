@@ -6,8 +6,8 @@ mathematics in a regular way that a small model can capture. We embed goal
 states, cluster them into microstates, fit a Markov state model with proof
 steps as the unit of time, and coarse-grain it into metastable sets with PCCA+.
 Against MSC 2020 labels from two LLM judges, the metastable sets reach an NMI
-of \todo{x.xx}, compared with \todo{x.xx} for a baseline that labels each proof
+of \resMacroNMI, compared with \resFolderNMI{} for a baseline that labels each proof
 by its Mathlib folder, and the slowest area-switching process relaxes over
-about \todo{n} tactic steps. Used as a prior in best-first search with
+about \resSlowestTimescale{} tactic steps. Used as a prior in best-first search with
 DeepSeek-Prover-V1.5, the area model changes the number of problems solved
-under a fixed budget by \todo{x} on miniF2F and \todo{x} on ProofNet.
+under a fixed budget by \resSearchGainMiniF{} on miniF2F and \resSearchGainProofNet{} on ProofNet.
