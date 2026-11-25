@@ -1,0 +1,165 @@
+# Mathlib folder -> MSC 2020 top-level code, for `markov-lean premise-labels`.
+#
+# A premise (a lemma or definition a tactic step uses) is placed by the file it is
+# defined in.  Its path inside Mathlib, without `.lean`, is matched against the keys
+# below; the longest key that is a whole-folder prefix wins
+# (`Algebra/Order/Ring/Lemmas` matches `Algebra/Order` before `Algebra`).
+# Codes are the judges' two-digit MSC 2020 classes (src/markov_lean/msc.py).
+#
+# `null` means "no area": the premise is ignored, as if the step had not cited it.
+# Files outside Mathlib (Lean core, Batteries, Aesop) are always ignored.
+#
+# Folders listed under `glue` are general-purpose foundations that proofs in every
+# area use (logic, sets, basic orders and intervals, finite types, ordered-ring inequalities,
+# and the basic identities of groups and rings).  The main labels
+# ignore them; the `premise_glue` variant gives them the code below.
+#
+# The table is a judgement call and is deliberately small.  Where a folder spans two
+# classes, the code is the one its lemmas are mostly about (e.g. Analysis/SpecialFunctions
+# is exp, log, rpow and trigonometry on the reals, so 26, not 33).
+
+areas:
+  # ---- algebra
+  Algebra: "08"
+  Algebra/Order: "06"
+  Algebra/Group: "20"
+  Algebra/GroupPower: "20"
+  Algebra/GroupWithZero: "20"
+  Algebra/Hom: "08"
+  Algebra/Ring: "16"
+  Algebra/Field: "12"
+  Algebra/CharP: "12"
+  Algebra/CharZero: "12"
+  Algebra/Polynomial: "12"
+  Algebra/MvPolynomial: "12"
+  Algebra/GCDMonoid: "13"
+  Algebra/Algebra: "16"
+  Algebra/MonoidAlgebra: "16"
+  Algebra/Star: "16"
+  Algebra/Module: "15"
+  Algebra/BigOperators: "05"
+  Algebra/Homology: "18"
+  Algebra/Category: "18"
+  Algebra/Lie: "17"
+  Algebra/Jordan: "17"
+  Algebra/ContinuedFractions: "11"
+  Algebra/QuadraticDiscriminant: "12"
+  Algebra/Squarefree: "11"
+  GroupTheory: "20"
+  RepresentationTheory: "20"
+  RingTheory: "13"
+  FieldTheory: "12"
+  LinearAlgebra: "15"
+  NumberTheory: "11"
+  # ---- analysis
+  Analysis: "26"
+  Analysis/Complex: "30"
+  Analysis/Normed: "46"
+  Analysis/NormedSpace: "46"
+  Analysis/InnerProductSpace: "46"
+  Analysis/LocallyConvex: "46"
+  Analysis/Seminorm: "46"
+  Analysis/CStarAlgebra: "46"
+  Analysis/Distribution: "46"
+  Analysis/Convex: "52"
+  Analysis/Fourier: "42"
+  Analysis/BoxIntegral: "28"
+  Analysis/SpecificLimits: "40"
+  Analysis/ODE: "34"
+  Analysis/Matrix: "15"
+  MeasureTheory: "28"
+  Probability: "60"
+  Dynamics: "37"
+  InformationTheory: "94"
+  # ---- topology and geometry
+  Topology: "54"
+  Topology/Algebra: "22"
+  Topology/Homotopy: "55"
+  Topology/Sheaves: "18"
+  Order/Filter: "54"
+  AlgebraicTopology: "55"
+  Geometry: "51"
+  Geometry/Euclidean: "51"
+  Geometry/Manifold: "57"
+  Geometry/RingedSpace: "14"
+  AlgebraicGeometry: "14"
+  # ---- discrete, logic, order
+  Combinatorics: "05"
+  Order: "06"
+  SetTheory: "03"
+  ModelTheory: "03"
+  Computability: "03"
+  Computability/AkraBazzi: "68"
+  CategoryTheory: "18"
+  Condensed: "18"
+  # ---- Data: number systems and finite structures carry an area; the rest is glue
+  Data: null
+  Data/Nat: "11"
+  Data/Int: "11"
+  Data/PNat: "11"
+  Data/ZMod: "11"
+  Data/Rat: "11"
+  Data/Num: "11"
+  Data/Real: "26"
+  Data/NNReal: "26"
+  Data/EReal: "26"
+  Data/ENNReal: "28"
+  Data/Complex: "30"
+  Data/Finset: "05"
+  Data/Fintype: "05"
+  Data/Multiset: "05"
+  Data/List: "05"
+  Data/Matroid: "05"
+  Data/Sym: "05"
+  Data/Nat/Choose: "05"
+  Data/Finsupp: "15"
+  Data/DFinsupp: "15"
+  Data/Matrix: "15"
+  Data/Polynomial: "12"
+  Data/Set: "03"
+  Data/Fin: "05"
+  Data/Seq: "68"
+  Data/Vector: "68"
+  Data/Array: "68"
+  Data/String: "68"
+  Data/Tree: "68"
+  Data/Ordmap: "68"
+  Data/QPF: "68"
+  Data/Stream: "68"
+  # ---- foundations and tooling
+  Logic: "03"
+  Init: null
+  Tactic: null
+  Mathlib: null
+  Util: null
+  Lean: null
+  Control: null
+  Deprecated: null
+  Testing: null
+
+glue:
+  # logic, sets and basic order
+  - Logic
+  - Order/Basic
+  - Order/Defs
+  - Order/Lattice
+  - Order/Monotone
+  - Order/Bounds
+  - Order/Max
+  - Order/MinMax
+  - Data/Set
+  - Data/Fin
+  - Data/Fintype
+  - Data/List
+  - Order/Interval
+  - Order/WithBot
+  # inequalities in ordered rings and fields (mul_pos, add_le_add, div_le_iff)
+  - Algebra/Order
+  # the basic identities of monoids, groups and rings (mul_one, inv_mul_cancel_left, mul_add)
+  - Algebra/Group/Defs
+  - Algebra/Group/Basic
+  - Algebra/GroupWithZero/Defs
+  - Algebra/GroupWithZero/Basic
+  - Algebra/Ring/Defs
+  - Algebra/Ring/Basic
+  - Algebra/GroupPower/Basic

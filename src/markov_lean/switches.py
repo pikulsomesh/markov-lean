@@ -116,7 +116,9 @@ STAT_LABELS = {
     "off_mode": "Share off main area",
 }
 NULL_LABELS = {"shuffle": "Shuffle", "markov": "Markov", "pooled": "Folder pool", "noise": "Noise floor"}
-SOURCE_LABELS = {"judge": "Judge MSC", "true_area": "True area", "macrostate": "Macrostate"}
+SOURCE_LABELS = {"judge": "Judge MSC", "true_area": "True area", "macrostate": "Macrostate",
+                 "premise": "Premise MSC", "premise_carry": "Premise (carried)", "premise_strict": "Premise (strict)",
+                 "premise_glue": "Premise (with glue)", "premise_folder": "Premise folder"}
 LENGTH_EDGES = (2, 4, 8, 16, 32)
 
 
