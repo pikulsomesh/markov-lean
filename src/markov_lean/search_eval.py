@@ -482,15 +482,16 @@ def make_env(search_config: dict):
 
 
 def make_prover(search_config: dict, seed: int):
-    """A ``ProverClient`` with the run seed; ``prover.factory`` (``module:callable``)
-    swaps in another proposer, which tests use."""
+    """The proposer for ``prover.backend`` (vLLM by default, ``llama_cpp`` for a local
+    GGUF) with the run seed; ``prover.factory`` (``module:callable``) swaps in another
+    proposer, which tests use."""
     cfg = dict(search_config.get("prover") or {})
     factory = cfg.pop("factory", None)
     if factory:
         return _import(factory)(seed=seed, **cfg)
-    from markov_lean.search.prover import ProverClient
+    from markov_lean.search.prover import make_proposer
 
-    return ProverClient(seed=seed, **cfg)
+    return make_proposer(cfg, seed=seed)
 
 
 class Worker:
@@ -702,6 +703,14 @@ def _select(names: Sequence[str] | None, available: Iterable[str], what: str) ->
     return list(names)
 
 
+def _prover_record(search_config: dict) -> dict:
+    """Prover settings for runs.jsonl: no key, and the model file by name only."""
+    rec = {k: v for k, v in (search_config.get("prover") or {}).items() if k != "api_key"}
+    if rec.get("model_path"):
+        rec["model_path"] = os.path.basename(str(rec["model_path"]))
+    return rec
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="markov-lean search-eval",
                                 description="Proof search on miniF2F / PutnamBench under prior conditions.")
@@ -714,6 +723,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--name", action="append", help="only these theorem names; repeatable")
     p.add_argument("--workers", type=int, help="parallel search processes (default: config)")
     p.add_argument("--endpoint", help="override prover.base_url, e.g. http://127.0.0.1:8000")
+    p.add_argument("--backend", choices=["vllm", "llama_cpp"],
+                   help="override prover.backend: vllm (default) or llama_cpp for a local GGUF (Mac smoke)")
+    p.add_argument("--model-path", help="override prover.model_path, the GGUF file for --backend llama_cpp")
     p.add_argument("--msm-dir", help="override msm_dir (the saved Markov model for the area prior)")
     p.add_argument("--max-hours", type=float, help="stop taking new problems after this many hours")
     p.add_argument("--max-usd", type=float, help="same, as instance dollars at cost.hourly_usd")
@@ -729,6 +741,10 @@ def main(argv: list[str] | None = None) -> int:
     cfg = EvalConfig.load(args.config)
     if args.endpoint:
         cfg.search_config.setdefault("prover", {})["base_url"] = args.endpoint
+    if args.backend:
+        cfg.search_config.setdefault("prover", {})["backend"] = args.backend
+    if args.model_path:
+        cfg.search_config.setdefault("prover", {})["model_path"] = args.model_path
     if args.msm_dir:
         cfg.msm_dir = args.msm_dir
     benchmarks = _select(args.benchmark, cfg.benchmarks, "benchmark")
@@ -786,8 +802,7 @@ def main(argv: list[str] | None = None) -> int:
             "commit": _git_commit(), "argv": argv if argv is not None else sys.argv[1:],
             "benchmarks": {b: len(problems[b]) for b in benchmarks}, "conditions":
             {c: cfg.prior_spec(c, 0) for c in conditions}, "seeds": list(seeds),
-            "budget": cfg.budget, "workers": workers, "prover": {
-                k: v for k, v in (cfg.search_config.get("prover") or {}).items() if k != "api_key"},
+            "budget": cfg.budget, "workers": workers, "prover": _prover_record(cfg.search_config),
         }) + "\n")
     deadline = time.time() + max_hours * 3600 if max_hours is not None else None
     stats = run_tasks(cfg, problems, tasks, out, workers, deadline, est.hourly)
@@ -803,7 +818,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"ran {stats['done']} problem runs, solved {stats['solved']}, errors {stats['errors']}"
           + (f", stopped: {stats['stopped']}" if stats["stopped"] else ""))
     print(f"Report: markov-lean search-report --runs {out}")
-    print("If you are done on the instance, stop it now (see docs/search_eval.md).")
+    if est.hourly > 0:
+        print("If you are done on the instance, stop it now (see docs/search_eval.md).")
     return 1 if stats["stopped"] and stats["stopped"] != "time limit reached" else 0
 
 

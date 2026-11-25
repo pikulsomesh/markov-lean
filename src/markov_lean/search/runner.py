@@ -22,14 +22,25 @@ from markov_lean.search.best_first import (
     TRACE_COLUMNS,
     BestFirstSearch,
     Prior,
+    Proposer,
     SearchConfig,
     Theorem,
     make_lm_prior,
 )
 from markov_lean.search.lean_env import DEFAULT_HEADER, LeanEnv, default_repl_command
-from markov_lean.search.prover import ProverClient
+from markov_lean.search.prover import make_proposer
 
 log = logging.getLogger(__name__)
+
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _project_dir(lean_cfg: dict) -> Path:
+    """``lean.project_dir``, relative to the repo root (not the current directory), as
+    ``search-eval`` resolves it."""
+    p = Path(lean_cfg.get("project_dir", "lean")).expanduser()
+    return p if p.is_absolute() else ROOT / p
 
 
 def split_header(header: str) -> tuple[list[str], str]:
@@ -111,7 +122,7 @@ def run(
     limit: int | None = None,
     resume: bool = False,
     env: LeanEnv | None = None,
-    prover: ProverClient | None = None,
+    prover: Proposer | None = None,
 ) -> dict:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -121,13 +132,14 @@ def run(
         cmd = lean_cfg.get("command") or default_repl_command(lean_cfg["repl_dir"])
         env = LeanEnv(
             cmd,
-            cwd=lean_cfg.get("project_dir", "lean"),
+            cwd=_project_dir(lean_cfg),
             header=header,
             timeout=float(lean_cfg.get("timeout", 60)),
             startup_timeout=float(lean_cfg.get("startup_timeout", 900)),
         )
+    own_prover = prover is None
     if prover is None:
-        prover = ProverClient(**(config.get("prover") or {}))
+        prover = make_proposer(config.get("prover"))
     search = BestFirstSearch(
         env, prover, load_prior(config.get("prior")), SearchConfig.from_dict(config.get("search"))
     )
@@ -137,21 +149,26 @@ def run(
             p.unlink(missing_ok=True)
     skip = _done(summary_path) if resume else set()
     solved = total = 0
-    with env:
-        for thm in load_theorems(benchmark, source, splits, names, limit, header):
-            if thm.proof_id in skip:
-                continue
-            res = search.search(thm)
-            total += 1
-            solved += res.solved
-            with open(summary_path, "a") as f:
-                f.write(json.dumps(res.summary(), ensure_ascii=False) + "\n")
-            with open(trace_path, "a") as f:
-                for row in res.trace:
-                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            log.info("%s: %s (%s, %d expansions, %.0fs) [%d/%d solved]", thm.proof_id,
-                     "solved" if res.solved else "failed", res.stop_reason, res.expansions,
-                     res.elapsed, solved, total)
+    try:
+        with env:
+            for thm in load_theorems(benchmark, source, splits, names, limit, header):
+                if thm.proof_id in skip:
+                    continue
+                res = search.search(thm)
+                total += 1
+                solved += res.solved
+                with open(summary_path, "a") as f:
+                    f.write(json.dumps(res.summary(), ensure_ascii=False) + "\n")
+                with open(trace_path, "a") as f:
+                    for row in res.trace:
+                        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                log.info("%s: %s (%s, %d expansions, %.0fs) [%d/%d solved]", thm.proof_id,
+                         "solved" if res.solved else "failed", res.stop_reason, res.expansions,
+                         res.elapsed, solved, total)
+    finally:
+        close = getattr(prover, "close", None) if own_prover else None
+        if callable(close):
+            close()
     write_parquet(out)
     return {"theorems": total, "solved": solved}
 

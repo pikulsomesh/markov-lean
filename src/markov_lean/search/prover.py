@@ -13,6 +13,7 @@ Only ``httpx`` is used, against ``POST {base_url}/v1/completions``.
 """
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
@@ -35,6 +36,10 @@ PROMPT_PREFIX = {
 }
 DEFAULT_MODEL = "deepseek-ai/DeepSeek-Prover-V1.5-RL"
 INDENT = "  "
+
+# vLLM answers 400 "This model's maximum context length is 4096 tokens. However, you requested ..."
+_CONTEXT_ERROR = re.compile(r"maximum context length|context length|context window", re.I)
+log = logging.getLogger(__name__)
 
 _STOP_LINE = re.compile(r"^(theorem|lemma|example|end|namespace|section|#)\b")
 
@@ -256,6 +261,12 @@ class ProverClient:
         for attempt in range(self.retries + 1):
             try:
                 r = self._client.post("/v1/completions", json=body)
+                if r.status_code == 400 and _CONTEXT_ERROR.search(r.text):
+                    # A deep node's prompt can outgrow the context. That node gets no
+                    # candidates; raising would fail the whole problem, and on resume
+                    # fail it again, until the worker gives up.
+                    log.warning("prompt too long for the model's context; no candidates: %s", r.text[:200])
+                    return []
                 if r.status_code >= 500:
                     raise httpx.HTTPStatusError(f"server error {r.status_code}", request=r.request, response=r)
                 r.raise_for_status()
@@ -287,3 +298,38 @@ class ProverClient:
             mode=self.mode,
         )
         return parse_choices(self.complete(prompt, n))
+
+
+BACKENDS = ("vllm", "llama_cpp")
+# Settings only the HTTP client uses; the local backend ignores them, so one config file
+# (with search.yaml's prover section merged in) works for both.
+_HTTP_ONLY = ("base_url", "timeout", "retries", "api_key", "client")
+
+
+def make_proposer(config: dict | None = None, seed: int | None = None):
+    """The tactic proposer a ``prover`` config section asks for.
+
+    ``backend: vllm`` (the default) is :class:`ProverClient` against a vLLM server;
+    ``backend: llama_cpp`` is :class:`~markov_lean.search.local_prover.LlamaCppProver`
+    on a local GGUF file (``model_path``), for smoke tests on a Mac. ``seed``, when given,
+    overrides the config's.
+    """
+    cfg = dict(config or {})
+    backend = cfg.pop("backend", None) or "vllm"
+    cfg.pop("factory", None)
+    if seed is not None:
+        cfg["seed"] = seed
+    if backend == "vllm":
+        cfg.pop("model_path", None)
+        for k in ("n_ctx", "n_gpu_layers", "n_threads", "n_batch", "verbose", "early_stop"):
+            cfg.pop(k, None)
+        return ProverClient(**cfg)
+    if backend == "llama_cpp":
+        from markov_lean.search.local_prover import LlamaCppProver
+
+        for k in _HTTP_ONLY:
+            cfg.pop(k, None)
+        if not cfg.get("model_path"):
+            raise ValueError("backend llama_cpp needs prover.model_path (or --model-path), a GGUF file")
+        return LlamaCppProver(**cfg)
+    raise ValueError(f"unknown prover backend {backend!r}; use one of {list(BACKENDS)}")

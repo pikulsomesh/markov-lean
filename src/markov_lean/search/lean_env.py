@@ -24,10 +24,12 @@ import queue
 import re
 import shlex
 import subprocess
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 # Same imports and opens DeepSeek-Prover-V1.5 puts in its prompts (prover/utils.py), so the
 # code the model sees and the code Lean checks agree. DeepSeek sets maxHeartbeats 0; we keep
@@ -131,6 +133,7 @@ class LeanEnv:
         self.generation = 0
         self.base_env: int | None = None
         self._proc: subprocess.Popen[str] | None = None
+        self._stderr: Any = None
         self._lines: queue.Queue[str | None] = queue.Queue()
         self._lock = threading.Lock()
 
@@ -139,22 +142,32 @@ class LeanEnv:
     def start(self) -> None:
         if self._proc is not None:
             return
+        # stderr goes to a file (a pipe nobody reads could fill and block the REPL); its
+        # tail goes into the error when the REPL won't start or dies, e.g. "unknown
+        # package 'Mathlib'" when lake runs outside the project or Mathlib isn't built.
+        self._close_stderr()
+        self._stderr = tempfile.TemporaryFile(mode="w+b")
         try:
             self._proc = subprocess.Popen(
                 self.command,
                 cwd=self.cwd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
+                stderr=self._stderr,
                 text=True,
                 encoding="utf-8",
                 bufsize=1,
             )
         except OSError as e:
-            raise LeanError(f"could not start the REPL with {self.command}: {e}") from e
+            raise LeanError(f"could not start the REPL with {self.command} in {self.cwd}: {e}") from e
         self._lines = queue.Queue()
         threading.Thread(target=self._pump, args=(self._proc, self._lines), daemon=True).start()
-        resp = self._send({"cmd": self.header}, self.startup_timeout)
+        try:
+            resp = self._send({"cmd": self.header}, self.startup_timeout)
+        except LeanError as e:
+            tail = self.last_stderr
+            raise type(e)(f"REPL did not start ({e}); command {self.command} in {self.cwd}"
+                          + (f"; stderr: {tail}" if tail else "")) from e
         errors = _errors(resp)
         if "env" not in resp or errors:
             self.close()
@@ -184,6 +197,28 @@ class LeanEnv:
         except subprocess.TimeoutExpired:
             pass
 
+    @property
+    def last_stderr(self) -> str:
+        """The last 2000 characters the REPL wrote to stderr (kept after it exits)."""
+        f = self._stderr
+        if f is None:
+            return ""
+        try:
+            f.flush()
+            size = f.seek(0, os.SEEK_END)
+            f.seek(max(0, size - 2000))
+            return f.read().decode("utf-8", errors="replace").strip()
+        except (OSError, ValueError):
+            return ""
+
+    def _close_stderr(self) -> None:
+        if self._stderr is not None:
+            try:
+                self._stderr.close()
+            except OSError:
+                pass
+            self._stderr = None
+
     def restart(self) -> None:
         self.close()
         self.generation += 1
@@ -195,6 +230,7 @@ class LeanEnv:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+        self._close_stderr()
 
     # -- protocol ----------------------------------------------------------------------
 

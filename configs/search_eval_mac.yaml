@@ -1,0 +1,59 @@
+# Smoke test of the search evaluation on the Mac Mini (M2, 16 GB), before any GPU time.
+# The prover is a 4-bit GGUF of DeepSeek-Prover-V1.5-RL run in-process by llama.cpp on
+# Metal instead of vLLM. It checks the harness (Lean REPL, prompts, priors, logs, report),
+# not the paper's numbers: quantized weights and another sampler stream mean its pass
+# rates are not comparable with the EC2 runs. Runbook: MAC_SMOKE.md.
+#
+#   markov-lean search-eval --config configs/search_eval_mac.yaml --out results/mac_smoke \
+#       --benchmark minif2f --limit 10 --condition lm --yes
+
+base_config: configs/search.yaml   # lean settings (project lean/, REPL in ~/repl)
+
+prover:
+  backend: llama_cpp
+  model_path: ~/models/deepseek-prover-v1.5-rl_q4_k_m.gguf   # or pass --model-path
+  n: 8                      # samples per expansion, drawn one after another
+  temperature: 1.0
+  top_p: 0.95
+  max_tokens: 128           # generation stops at the end of the first tactic anyway
+  n_ctx: 4096               # DeepSeek-Prover-V1.5's context; about 2 GB of KV cache
+  n_gpu_layers: -1          # every layer on the GPU (Metal)
+
+lean:
+  timeout: 60
+  startup_timeout: 900      # first Mathlib import on a cold disk is slow
+
+budget:                     # small on purpose: this finds bugs, it does not measure
+  max_expansions: 12
+  wall_time: 180
+  max_depth: 16
+
+seeds: [0]
+subset_seed: 0              # same problem order as configs/search_eval.yaml
+workers: 1                  # one model in memory; the Mac has 16 GB
+
+msm_dir: results/pilot3/msm # the saved Markov model, for the area conditions
+
+benchmarks:
+  minif2f:
+    path: data/raw/deepseek_benchmarks/minif2f.jsonl
+    format: jsonl
+    splits: [test]
+
+conditions:
+  lm:
+    factory: lm
+  area_l0.3:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  random_l0.3:
+    factory: markov_lean.search_eval:RandomPrior
+    kwargs: {lam: 0.3}
+
+cost:                       # local machine: no instance bill, so the estimate is in hours
+  hourly_usd: 0.0
+  ebs_usd_per_hour: 0.0
+  startup_hours: 0.05
+  sec_per_expansion: 15.0   # a guess for 8 samples on an M2 plus Lean; the smoke run measures it
+  parallel_efficiency: 1.0
+  expected_fraction: {minif2f: 0.6}
