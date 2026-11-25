@@ -46,6 +46,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from markov_lean import judge as J
+from markov_lean import prompts as P
 from markov_lean.evaluate import folder_label
 
 DEFAULT_HOST = "http://localhost:11434"
@@ -55,9 +56,12 @@ PROGRESS = "progress.jsonl"
 SAMPLE = "sample.json"
 
 
-def judge_name(model: str) -> str:
-    """The ``judge`` value written to the labels table, e.g. ``ollama/qwen2.5:7b-instruct``."""
-    return model if model.startswith(JUDGE_PREFIX) else JUDGE_PREFIX + model
+def judge_name(model: str, prompt: str = P.DEFAULT_VERSION) -> str:
+    """The ``judge`` value written to the labels table, e.g. ``ollama/qwen2.5:7b-instruct``.
+    A prompt other than the default ``v1`` is part of the name (``ollama/qwen2.5:7b-instruct@v2``),
+    so labels from two prompt versions never look like one judge."""
+    name = model if model.startswith(JUDGE_PREFIX) else JUDGE_PREFIX + model
+    return name if prompt == P.DEFAULT_VERSION else f"{name}@{prompt}"
 
 
 # --------------------------------------------------------------------------- HTTP client
@@ -221,9 +225,10 @@ class LocalSettings:
     keep_alive: str = "30m"
     chars_per_token: float = 3.0  # same heuristic as the API estimate; errs high for Lean
     schema: bool = True           # False on Ollama < 0.5: plain JSON mode plus repair
+    prompt: str = P.DEFAULT_VERSION  # judge prompt version (markov_lean.prompts); v1 is the API judges'
 
     def num_predict(self, n_steps: int) -> int:
-        return min(4096, 128 + 48 * max(1, n_steps))
+        return min(4096, 128 + 48 * max(1, n_steps) + P.get(self.prompt).extra_output_tokens)
 
 
 @dataclass
@@ -249,12 +254,14 @@ class ProofResult:
 
 
 def chat_body(proof: J.Proof, s: LocalSettings, attempt: int = 0, num_predict: int | None = None) -> dict:
-    """The /api/chat request: the API judges' prompt and schema, deterministic decoding."""
+    """The /api/chat request: the chosen prompt version (by default the API judges' prompt and
+    schema), deterministic decoding."""
+    pv = P.get(s.prompt)
     return {
         "model": s.model,
-        "messages": [{"role": "system", "content": J.SYSTEM_PROMPT},
-                     {"role": "user", "content": J.render_user(proof)}],
-        "format": J.output_schema() if s.schema else "json",
+        "messages": [{"role": "system", "content": pv.system},
+                     {"role": "user", "content": pv.render_user(proof)}],
+        "format": pv.schema() if s.schema else "json",
         "options": {
             "temperature": s.temperature if attempt == 0 else max(s.temperature, 0.3),
             "seed": s.seed + attempt,
@@ -266,14 +273,15 @@ def chat_body(proof: J.Proof, s: LocalSettings, attempt: int = 0, num_predict: i
 
 
 def estimated_prompt_tokens(proof: J.Proof, s: LocalSettings) -> int:
-    chars = len(J.SYSTEM_PROMPT) + len(J.render_user(proof)) + len(json.dumps(J.output_schema()))
+    pv = P.get(s.prompt)
+    chars = len(pv.system) + len(pv.render_user(proof)) + len(json.dumps(pv.schema()))
     return math.ceil(chars / s.chars_per_token)
 
 
 def label_proof(client: OllamaClient, proof: J.Proof, s: LocalSettings,
                 sleep: Callable[[float], None] = time.sleep) -> ProofResult:
     """Label one proof, retrying server errors, unparseable answers and answers cut off by length."""
-    name = judge_name(s.model)
+    name = judge_name(s.model, s.prompt)
     entry = {"proof_id": proof.proof_id, "judge": name, "steps": [st.step for st in proof.steps]}
     base = {"proof_id": proof.proof_id, "judge": name}
     t0 = time.monotonic()
@@ -446,12 +454,14 @@ def export(out: str | Path, model: str | None = None, echo: Callable[[str], None
     issues = [rec["issue"] for rec in done.values() if rec.get("issue")]
     (paths.out / "issues.json").write_text(json.dumps(issues, indent=1))
     sample = json.loads(paths.sample.read_text()) if paths.sample.exists() else {}
+    prompt = (sample.get("settings") or {}).get("prompt", P.DEFAULT_VERSION)
     counts: dict[str, int] = {}
     for rec in done.values():
         counts[rec["status"]] = counts.get(rec["status"], 0) + 1
     secs = [rec["seconds"] for rec in done.values() if rec.get("seconds")]
     summary = {
-        "judge": judge_name(model or sample.get("model", DEFAULT_MODEL)),
+        "judge": judge_name(model or sample.get("model", DEFAULT_MODEL), prompt),
+        "prompt": prompt,
         "proofs_in_sample": len(sample.get("proof_ids", [])),
         "proofs_done": len(done),
         "status_counts": counts,
@@ -510,6 +520,10 @@ def run_label(steps: pd.DataFrame, out: str | Path, settings: LocalSettings, *, 
         old = json.loads(paths.sample.read_text())
         if old.get("model") != settings.model:
             raise OllamaError(f"{paths.out} holds labels from {old.get('model')}; use another --out or --fresh")
+        old_prompt = (old.get("settings") or {}).get("prompt", P.DEFAULT_VERSION)
+        if old_prompt != settings.prompt:
+            raise OllamaError(f"{paths.out} holds labels made with prompt {old_prompt}, not {settings.prompt}; "
+                              "use another --out or --fresh")
     # the plan is deterministic, so re-running the same command resumes the same sample; a changed
     # sample (a bigger --sample-steps, or API labels that arrived since) reuses every proof already done
     paths.sample.write_text(json.dumps({
@@ -523,7 +537,7 @@ def run_label(steps: pd.DataFrame, out: str | Path, settings: LocalSettings, *, 
     if limit_proofs is not None:
         todo = todo[:limit_proofs]
     n_steps_todo = sum(len(by_id[i].steps) for i in todo)
-    echo(f"Local judge {judge_name(settings.model)} (Ollama {version}): {len(ids)} proofs in the sample, "
+    echo(f"Local judge {judge_name(settings.model, settings.prompt)} (Ollama {version}): {len(ids)} proofs in the sample, "
          f"{sum(i in skip for i in ids)} already done, {len(todo)} to label now ({n_steps_todo} steps).")
 
     t_start = time.monotonic()
@@ -604,6 +618,9 @@ def main(argv: list[str] | None = None, client: OllamaClient | None = None,
         p.add_argument("--timeout", type=float, default=600.0, help="seconds to wait for one answer")
         p.add_argument("--run", help="pilot run folder; steps default to <run>/judge/sample_steps.parquet")
         p.add_argument("--steps", help="a `steps` table (parquet, csv or jsonl)")
+        p.add_argument("--prompt", choices=list(P.PROMPTS), default=P.DEFAULT_VERSION,
+                       help="judge prompt version: v1 is the API judges' prompt (default), v2 the one "
+                            "tuned for small local models (see markov_lean/prompts.py)")
 
     c = sub.add_parser("check", help="is the server up and the model pulled; time one proof")
     common(c)
@@ -631,7 +648,7 @@ def main(argv: list[str] | None = None, client: OllamaClient | None = None,
 
     cfg = J.load_config(args.config)
     client = client or OllamaClient(args.host, args.timeout)
-    settings = LocalSettings(model=args.model, num_ctx=args.num_ctx)
+    settings = LocalSettings(model=args.model, num_ctx=args.num_ctx, prompt=args.prompt)
     steps_path = args.steps or _default_steps(args.run)
 
     if args.cmd == "check":
@@ -648,6 +665,8 @@ def main(argv: list[str] | None = None, client: OllamaClient | None = None,
     if out is None:
         base = Path(args.run) / "judge" / "local" if args.run else Path("results") / "local_judge"
         out = base / args.model.replace(":", "_").replace("/", "_")
+        if args.prompt != P.DEFAULT_VERSION:
+            out = out.with_name(out.name + "_" + args.prompt)
     try:
         run_label(J._read_table(steps_path), out, settings, client=client, cfg=cfg, labels=labels,
                   stratify_by=args.stratify_by, n_steps=None if args.all else args.sample_steps,

@@ -44,6 +44,7 @@ downloads exactly these):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -421,6 +422,58 @@ def balance_markdown(b: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ---------------------------------------------------------------- dev/test split
+
+DEFAULT_EVAL_SPLIT = ROOT / "data" / "gold" / "msc_gold_eval_split.csv"
+EVAL_SPLIT_SEED = 20261125
+EVAL_SPLITS = ("dev", "test")
+
+
+def _split_key(seed: int, pid: str) -> str:
+    return hashlib.sha256(f"{seed}:{pid}".encode()).hexdigest()
+
+
+def eval_split(gold: pd.DataFrame, seed: int = EVAL_SPLIT_SEED) -> pd.Series:
+    """A fixed dev/test split of the gold set, for designing judge prompts without
+    scoring on the problems they were tuned on.
+
+    Problems are grouped by stratum (strict rows by their class, family rows by their
+    rule, excluded rows together). Within a stratum they are ordered by
+    ``sha256(f"{seed}:{id}")``; the first ``floor(n / 2)`` go to ``dev`` and the rest to
+    ``test``, so test gets the extra problem of an odd stratum and every class with two
+    or more problems is in both halves. The split depends only on the ids, the statuses
+    and the seed, not on row order. Returns a Series of "dev"/"test" indexed like ``gold``.
+    """
+    stratum = np.where(gold.status == "strict", "strict:" + gold.msc,
+                       np.where(gold.status == "family", "family:" + gold.rule, "excluded"))
+    out = pd.Series("test", index=gold.index, dtype=object)
+    for _, idx in pd.Series(gold.index, index=stratum).groupby(level=0):
+        ids = gold.loc[idx.to_numpy(), "id"].astype(str)
+        order = sorted(ids.index, key=lambda i: _split_key(seed, ids[i]))
+        out.loc[order[: len(order) // 2]] = "dev"
+    return out
+
+
+def read_eval_split(path: str | Path = DEFAULT_EVAL_SPLIT) -> dict[str, str]:
+    """The committed split (``data/gold/msc_gold_eval_split.csv``): gold id -> "dev" or "test"."""
+    df = pd.read_csv(path, dtype=str, keep_default_na=False)
+    return dict(zip(df.id, df.eval_split))
+
+
+def select_split(gold: pd.DataFrame, which: str, split: dict[str, str] | None = None) -> pd.DataFrame:
+    """The gold rows in ``which`` ("dev", "test" or "all")."""
+    if which == "all":
+        return gold
+    if which not in EVAL_SPLITS:
+        raise ValueError(f"unknown split {which!r}; use dev, test or all")
+    split = split if split is not None else read_eval_split()
+    missing = set(gold.id) - set(split)
+    if missing:
+        raise ValueError(f"{len(missing)} gold ids have no dev/test assignment (e.g. {sorted(missing)[:3]}); "
+                         "run `markov-lean gold-set eval-split` after rebuilding the gold table")
+    return gold[gold.id.map(split) == which]
+
+
 # ---------------------------------------------------------------- judge input
 
 def read_minif2f_proofs(zip_path: str | Path) -> dict[str, str]:
@@ -501,6 +554,12 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--proofs", default=None,
                     help="DeepSeek-Prover-V2 minif2f-solutions.zip: show miniF2F proofs as the tactic")
     st.add_argument("--seed", type=int, default=0)
+    st.add_argument("--eval-split", choices=["all", *EVAL_SPLITS], default="all",
+                    help="only the dev or test half of the fixed dev/test split (default all)")
+    es = sub.add_parser("eval-split", help="write the fixed dev/test split of the gold set")
+    es.add_argument("--gold", default=str(DEFAULT_GOLD))
+    es.add_argument("--out", default=str(DEFAULT_EVAL_SPLIT))
+    es.add_argument("--seed", type=int, default=EVAL_SPLIT_SEED)
     a = ap.parse_args(argv)
 
     if a.cmd == "build":
@@ -516,7 +575,7 @@ def main(argv: list[str] | None = None) -> int:
         bal = balance(read_gold(a.gold))
         print(json.dumps(bal, indent=1) if a.json else balance_markdown(bal))
     elif a.cmd == "steps":
-        gold = read_gold(a.gold)
+        gold = select_split(read_gold(a.gold), a.eval_split)
         proofs = read_minif2f_proofs(a.proofs) if a.proofs else None
         statuses = ("strict",) if a.strict_only else ("strict", "family")
         steps = to_steps(gold, statuses=statuses, per_class=a.per_class, seed=a.seed, proofs=proofs)
@@ -525,6 +584,14 @@ def main(argv: list[str] | None = None) -> int:
         steps.to_parquet(out, index=False)
         n_proof = int((steps.tactic != "sorry").sum())
         print(f"wrote {out}: {len(steps)} problems ({n_proof} with a proof shown)")
+    elif a.cmd == "eval-split":
+        gold = read_gold(a.gold)
+        sp = eval_split(gold, a.seed)
+        out = Path(a.out)
+        pd.DataFrame({"id": gold.id, "eval_split": sp}).to_csv(out, index=False)
+        counts = pd.crosstab(gold.status, sp)
+        print(counts.to_string())
+        print(f"wrote {out}")
     return 0
 
 

@@ -109,6 +109,40 @@ check of whether seeing a proof changes the label. Tracing those proofs in Lean 
 goal states; that is not done here. The proofs are not stored in the repository, since that archive states
 no licence for them.
 
+## Dev and test halves
+
+A judge prompt designed while looking at gold problems would score well on those problems for the wrong
+reason. So the gold set has a fixed dev/test split, `data/gold/msc_gold_eval_split.csv`
+(`markov-lean gold-set eval-split` rewrites it, and `tests/test_prompts.py` checks it). Within each stratum
+(each strict class, each family rule, the excluded rows) problems are ordered by
+`sha256("20261125:" + id)`; the first half (rounded down) is dev and the rest is test. It depends only on the
+ids, statuses and the seed, not on row order. Strict rows: 270 dev, 276 test; every class is in both halves.
+
+Prompt work uses dev only, and any prompt designed that way is scored on test:
+`gold-set steps --eval-split test` writes only test problems, and `judge-accuracy --eval-split test` scores
+only them (the report says which half it used). `--eval-split all`, the default, keeps the earlier
+behaviour, which is right for a judge whose prompt was never tuned on the gold set, such as the API judges.
+
+## Local judge, prompt v2 against v1, on the test half
+
+```
+cd ~/markov-lean
+git pull
+source .venv/bin/activate
+pip install -e ".[dev,judge,search,figures]"
+
+markov-lean gold-set steps --strict-only --eval-split test --out results/gold/steps_test.parquet
+# v1 baseline on the same problems (reuses what the strict25 run already labelled)
+markov-lean local-judge label --steps results/gold/steps_test.parquet --all --stratify-by none \
+  --out results/gold/local/qwen2.5_7b-instruct
+# v2
+markov-lean local-judge label --steps results/gold/steps_test.parquet --all --stratify-by none \
+  --prompt v2 --out results/gold/local/qwen2.5_7b-instruct_v2
+markov-lean judge-accuracy --eval-split test --out results/gold/accuracy_test \
+  --labels results/gold/local/qwen2.5_7b-instruct/labels.parquet \
+           results/gold/local/qwen2.5_7b-instruct_v2/labels.parquet
+```
+
 ## On the Mac Mini, with the local judge (no API cost)
 
 Run it after the current local-judge labelling finishes, so the two runs do not share the GPU.
