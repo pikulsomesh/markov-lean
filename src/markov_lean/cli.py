@@ -86,12 +86,19 @@ def _bridges(rest: list[str]) -> int:
     return bridges.main(rest)
 
 
+def _significance(rest: list[str]) -> int:
+    from markov_lean import significance
+
+    return significance.main(rest)
+
+
 # Commands that parse their own options.
 PASSTHROUGH = {
     "cases": (_cases, "pick readable proofs that cross areas; write the case-study figure and table"),
     "search-eval": (_search_eval, "proof search on miniF2F/PutnamBench under prior conditions (EC2)"),
     "search-report": (_search_report, "pass@k tables, paired tests and figures from search-eval runs"),
     "bridges": (_bridges, "tactics and lemmas at the steps where a proof switches area, with lift and CIs"),
+    "significance": (_significance, "proof-level significance tests for gate 1 on a finished pilot run"),
 }
 
 
