@@ -51,6 +51,34 @@ this repo.
   `confidence`) plus `consensus` rows, which the pilot uses directly. The judge sample is drawn
   with a fixed seed, so pass 1 on the same data picks the same proofs.
 
+### After the judge batches finish: one command
+
+Once the Haiku and Sonnet batches show as ended, everything that follows is free and runs with one
+command on the Mac, in the shell that has `ANTHROPIC_API_KEY` set:
+
+```bash
+cd ~/markov-lean && git pull && source .venv/bin/activate
+bash scripts/after_judges.sh            # --dry-run first to see every command
+```
+
+It downloads the finished results without waiting (`scripts/collect_batches.py`, which only reads
+batch status and results; every other API call is blocked in the client wrapper), copies the
+labels to `results/pilot3/judge/labels.parquet`, then runs pilot pass 2 (gate 1), `judge-agreement`
+across Haiku, Sonnet and the local Qwen labels, `switches`, `significance` (Qwen as an extra
+judge), `bridges`, `cases`, `judge-accuracy` on whatever gold-set labels are under `results/gold/`,
+and `paper` (with `--accuracy results/gold/accuracy`, and the PDF if LaTeX is installed). It ends by
+writing `~/markov_lean_results.zip` (labels, issues, gate 1 report, agreement, switches,
+significance, bridges, `paper/figures`, the gold accuracy folder and the run log; nothing from
+`data/raw`, no file over 60 MB, and it refuses to zip anything that looks like a key) and printing
+the gate 1 verdict.
+
+Each step records the hash of the labels it ran on, so a rerun skips what already finished and
+redoes only failed steps or steps whose labels changed (`--force` redoes all, `--recollect`
+downloads again). It stops early, with a message, when the key is missing, `batches.json` or the
+pilot run is missing, or a batch has not ended. `--robustness` adds the slow robustness sweep
+(`ROBUSTNESS_ARGS` passes options). `tests/test_after_judges.py` runs it end to end on a synthetic
+pilot with a fake Batches client.
+
 ### The GPU instance
 
 The search stage runs only on a g6.xlarge you launch yourself; `docs/search_eval.md` is the full
