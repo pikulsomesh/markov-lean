@@ -64,7 +64,7 @@ TABLES = ["table_data", "table_areas", "table_search"]
 # Search conditions of configs/search_eval.yaml: row label in the table, short label in the figure.
 CONDITION_LABELS = {
     "lm": (r"LM only ($\lambda = 0$)", "LM only"),
-    "full": (r"Area prior ($\lambda = 0.3$)", "area prior"),
+    "full": (r"Area prior, all three terms ($\lambda = 0.3$)", "area prior"),
     "area_l0.1": (r"\quad dynamics term only ($\lambda = 0.1$)", "dynamics, 0.1"),
     "area_l0.3": (r"\quad dynamics term only ($\lambda = 0.3$)", "dynamics, 0.3"),
     "area_l0.6": (r"\quad dynamics term only ($\lambda = 0.6$)", "dynamics, 0.6"),
@@ -340,7 +340,6 @@ def table_data_tex(rows: dict[str, tuple[str, str]]) -> str:
         f"  Synthetic (planted)  & {cell('synthetic', 0)} & {cell('synthetic', 1)} & sanity check \\\\",
         r"  \midrule",
         r"  miniF2F (test)       & 244  & --   & search \\",
-        r"  ProofNet (test)      & 186  & --   & search \\",
         f"  PutnamBench          & {cell('putnam', 0)} & --   & search \\\\",
         r"  \bottomrule",
         r"\end{tabular}",
@@ -370,11 +369,9 @@ def table_areas_tex(cells: dict[str, tuple[str, str]], m: str = "10") -> str:
 
 
 def table_search_preview_tex() -> str:
-    """Table 3 (``tab:search``) before any search run: the rows the text plans, the benchmarks
+    """Table 3 (``tab:search``) before any search run: one row per condition and the benchmarks
     ``configs/search_eval.yaml`` runs, all dashes."""
-    rows = [r"LM only ($\lambda = 0$)", r"Area prior ($\lambda = 0.3$)", r"\quad without dynamics term",
-            r"\quad without visit term ($\alpha = 0$)", r"\quad without stall term ($\beta = 0$)",
-            "Random partition, same sizes"]
+    rows = [label for label, _ in CONDITION_LABELS.values()]
     lines = [r"\begin{tabular}{lcc}", r"  \toprule", r"  Prior & miniF2F & PutnamBench \\", r"  \midrule"]
     lines += [f"  {r} & \\tbd & \\tbd \\\\" for r in rows]
     lines += [r"  \bottomrule", r"\end{tabular}"]
