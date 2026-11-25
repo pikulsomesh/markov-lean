@@ -124,6 +124,18 @@ def _judge_agreement(rest: list[str]) -> int:
     return agreement.main(rest)
 
 
+def _gold_set(rest: list[str]) -> int:
+    from markov_lean import gold
+
+    return gold.main(rest)
+
+
+def _judge_accuracy(rest: list[str]) -> int:
+    from markov_lean import judge_accuracy
+
+    return judge_accuracy.main(rest)
+
+
 def _switches(rest: list[str]) -> int:
     from markov_lean import switches
 
@@ -158,6 +170,8 @@ PASSTHROUGH = {
     "significance": (_significance, "proof-level significance tests for gate 1 on a finished pilot run"),
     "local-judge": (_local_judge, "label proofs with a local Ollama model as a third MSC judge (no API calls)"),
     "judge-agreement": (_judge_agreement, "pairwise and Fleiss' kappa across judges, and each judge's NMI"),
+    "gold-set": (_gold_set, "benchmark problems with MSC codes known from their metadata: build, summary, steps"),
+    "judge-accuracy": (_judge_accuracy, "accuracy, macro-F1 and confusion of MSC judges on the gold set"),
     "switches": (_switches, "within-proof area switching against shuffle, Markov, pooled and noise nulls"),
     "export-dataset": (_export_dataset, "write the labelled dataset release folder from a pilot run (no upload)"),
     "nonrev-check": (_nonrev_check, "reversible vs non-reversible (GPCCA) and absorbing MSMs on the same microstates"),
