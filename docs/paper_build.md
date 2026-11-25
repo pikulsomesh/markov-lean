@@ -22,7 +22,8 @@ Every input is optional. A `--<name> PATH` flag picks a folder instead of search
 | `--msm` | `<full>/msm`, else `<pilot>/msm` | `implied_timescales`, `transition_matrix`, `chapman_kolmogorov`, lag, m, slowest timescale |
 | `--search` | `markov-lean search-eval` (`results/search_eval`) | table 3, `search_ablation`, seeds, per-benchmark gain of `--main-condition` (default `full`) over `--baseline` (default `lm`) |
 | `<search>/report` | `markov-lean search-report --runs <search>` | its `.tex` tables and `fig_*.pdf` figures, copied as `search_<name>` |
-| `--robustness` | `markov-lean robustness` (`<pilot>/robustness`) | the random-partition row of table 2, the judge ceiling; its figures are copied as `robustness_<name>.pdf` |
+| `--robustness` | `markov-lean robustness` (`<pilot>/robustness`) | table 2: every grouping of `baselines.csv` (macrostates, Mathlib folder and namespace at 1 and 2 levels, k-means on goal states and on microstate centers, microstates, the judges' proof label, random) with NMI, AMI, ARI and their intervals, all on the same steps, and the row-shuffle and proof-swap nulls of `robustness.json`; the judge ceiling; its figures are copied as `robustness_<name>.pdf` |
+| `--significance` | `markov-lean significance` (`<pilot>/significance`) | table 2: the within-proof shuffle null, and the intervals of the macrostate and folder rows when there is no robustness run |
 | `--bridges` | `markov-lean bridges` (`results/bridges`) | `bridges.pdf`, copied as is |
 
 `area_flow` uses the judges' MSC codes once labels exist and the macrostates before that (`--flow-areas` fixes one). Flows count only steps `t` and `t + 1` of the same proof.
@@ -38,7 +39,7 @@ Everything goes to `paper/figures/`:
 | `results_macros.tex` | `paper/results.tex`, input by `main.tex` after `macros.tex` |
 | `bridges.pdf`, `robustness_<name>.pdf`, `search_<name>.tex` / `.pdf` | nothing yet; there for the text to pick up |
 
-`paper/figures/preview/` holds the preview of each table and of the macros (red dashes only). The command rewrites them on every run so they match the code; `--redraw-previews` also redraws the preview figures with `scripts/preview_figures.py`. A table or macros file with no real number is not written, and an old generated one is removed, so the PDF never shows stale numbers as real.
+`paper/figures/preview/` holds the preview of each table and of the macros (red dashes only; in table 2 a plain dash marks a cell no run fills, such as AMI under a null). The command rewrites them on every run so they match the code; `--redraw-previews` also redraws the preview figures with `scripts/preview_figures.py`. A table or macros file with no real number is not written, and an old generated one is removed, so the PDF never shows stale numbers as real.
 
 ## Numbers the text can use
 
@@ -50,6 +51,8 @@ Each is a macro that prints a red dash until its run is in. The full list, with 
 | `\resNumMicrostates`, `\resLag`, `\resNumMacrostates`, `\resChecksFailed` | the model |
 | `\resSlowestTimescale` | slowest implied timescale, in proof steps |
 | `\resMacroNMI`, `\resMacroARI`, `\resFolderNMI`, `\resFolderARI`, `\resRandomNMI`, `\resRandomARI` | table 2 |
+| `\resMacroAMI`, `\resMacroNMILo`, `\resMacroNMIHi`, `\resFolderAMI`, `\resNamespaceNMI`, `\resNamespaceAMI`, `\resKmeansNMI`, `\resKmeansAMI` | table 2's AMI, the macrostates' NMI interval, and the namespace and k-means baselines |
+| `\resNullRowNMI`, `\resNullRowP`, `\resNullProofNMI`, `\resNullProofP`, `\resNullWithinNMI`, `\resNullWithinP` | mean NMI of the macrostates under each null and the observed NMI's p-value |
 | `\resGateOne` | `passed` or `failed` |
 | `\resJudgeKappa`, `\resJudgeAgreement` (%), `\resJudgeCeilingNMI`, `\resNumLabelledSteps` | the judges |
 | `\resSyntheticNMI` | macrostates against the planted areas |

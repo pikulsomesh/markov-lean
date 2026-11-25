@@ -73,10 +73,19 @@ for $m = 10$ and the sweep over $m$; next-area prediction against the
 ``stay'' and marginal baselines.}
 
 \begin{table}[t]
-  \caption{Agreement with the judges' consensus MSC codes. The folder
-  baseline labels each step by its Mathlib folder; the random partition
-  keeps the macrostate sizes. The last row scores the synthetic set against
-  its planted areas. \todo{fill from the judge run.}}
+  \caption{Agreement with the judges' consensus MSC codes. Brackets are
+  95\% bootstrap intervals over proofs; AMI corrects NMI for the number of
+  groups. The rows above the second rule are scored on the same labelled
+  steps. The folder and namespace rows label each step by its Mathlib folder
+  or the first components of its theorem name; the $k$-means rows cluster the
+  same goal-state features, or the same microstate centers, into $m$ groups
+  with no dynamics; the judges' proof label gives every step the judges'
+  own whole-proof label, an oracle; the random partition keeps the
+  macrostate sizes. The null rows give the macrostates' mean score when
+  their labels are shuffled over all steps, swapped between proofs of the
+  same length, or shuffled within each proof, with $p = $ \resNullRowP,
+  \resNullProofP{} and \resNullWithinP{} for the observed NMI. The last row scores the synthetic set against its planted
+  areas. \todo{fill from the judge run.}}
   \label{tab:areas}
   \centering\small
   \resultstable{table_areas}
