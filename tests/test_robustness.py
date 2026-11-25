@@ -137,13 +137,33 @@ def test_run_writes_tables(pilot_dir, tmp_path):
     assert "robust_pass" in rep["verdict"]
 
 
+def test_ck_reuses_pcca_like_deeptime(pilot_dir, tmp_path):
+    """The sweep's CK error (one PCCA+ per k) equals deeptime's own ck_test on the same model."""
+    from markov_lean.msm import cluster_microstates, estimate_msm
+
+    inp = rb.load_pilot(pilot_dir)
+    X = rb.featurize(inp.steps["state_before"].astype(str).tolist(), "tfidf_svd:16")
+    proof, _ = rb.codes(inp.assignments["proof_id"])
+    km = cluster_microstates(X, 20, 0)
+    np.save(tmp_path / "m.npy", km.labels_.astype(np.int64))
+    np.save(tmp_path / "c.npy", km.cluster_centers_)
+    lab, n_lab = rb.codes(rb.scored_frame(inp)["label"])
+    rows = rb._lag_cell({"micro_path": tmp_path / "m.npy", "centers_path": tmp_path / "c.npy", "spec": "x",
+                         "lag": 1, "ks": [3], "ck_mlags": 3, "proof": proof, "lab": lab, "n_lab": n_lab})
+    d = [np.asarray(t) for t in np.split(km.labels_.astype(np.int64), np.flatnonzero(np.diff(proof)) + 1)]
+    models = [estimate_msm(d, L, 20)[0] for L in (1, 2, 3)]
+    ck = models[0].ck_test(models, 3, include_lag0=False)
+    want = float(np.abs(np.asarray(ck.predictions) - np.asarray(ck.estimates)).max())
+    assert rows[0]["ck_max_error"] == pytest.approx(want)
+
+
 def test_cli_parallel_no_figures(pilot_dir, tmp_path):
     out = tmp_path / "cli"
     code = cli.main(["robustness", "--pilot", str(pilot_dir), "--out", str(out), "--jobs", "2", "--no-figures",
                      "--lags", "1", "--microstates", "20", "30", "--macrostates", "3", "6",
                      "--featurizers", "tfidf_svd:16", "--permutations", "20", "--bootstrap", "20"])
     assert code in (0, 1)
-    assert len(pd.read_csv(out / "sweep.csv")) == 4
+    assert len(pd.read_csv(out / "sweep.csv")) == 4  # 2 microstate counts x 1 lag x 2 k
     assert not (out / "figures").exists()
 
 

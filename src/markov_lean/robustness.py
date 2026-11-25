@@ -29,7 +29,9 @@ saw) and answers the questions a reviewer will ask about the gate 1 result:
    better than the first-order one, the process has memory at lag 1, which is
    what a failing Chapman-Kolmogorov test suggests.
 
-Nothing here calls an API.  Sweep cells run in parallel with ``jobs``.
+Nothing here calls an API.  Sweep cells run in parallel with ``jobs`` in spawned
+processes, so a script that calls ``run`` with ``jobs > 1`` needs the usual
+``if __name__ == "__main__":`` guard (the ``markov-lean`` command has it).
 """
 
 from __future__ import annotations
@@ -55,7 +57,8 @@ PROOF_LEVEL_STEP = -1
 @dataclass
 class RobustnessConfig:
     lags: list[int] = field(default_factory=lambda: [1, 2, 3, 5])
-    macrostates: list[int] = field(default_factory=lambda: list(range(2, 21)))
+    # PCCA+ time grows steeply with k (about 80 s per model at k = 20), so above 12 the grid is sparser
+    macrostates: list[int] = field(default_factory=lambda: list(range(2, 13)) + [14, 16, 18, 20])
     microstates: list[int] = field(default_factory=lambda: [50, 100, 200, 400])
     # "name" or "name:n_components"; tfidf_svd variants differ in SVD dimension
     featurizers: list[str] = field(default_factory=lambda: ["tfidf_svd:32", "tfidf_svd:64", "tfidf_svd:128",
@@ -623,106 +626,172 @@ def label_dynamics(rows: pd.DataFrame, col: str = "label") -> dict:
 # ============================================================================ sweeps
 
 
-def _its_rel(models: dict, lag: int, nxt: int, n_slow: int) -> float:
-    if lag not in models or nxt not in models:
-        return float("nan")
-    a, b = models[lag], models[nxt]
-    n = min(n_slow, a.n_states - 1, b.n_states - 1)
-    if n < 1:
-        return float("nan")
-    ta, tb = a.timescales(n), b.timescales(n)
-    return float(np.max(np.abs(tb - ta) / ta))
-
-
-def _sweep_cell(args: dict) -> list[dict]:
-    """One featurizer x microstate count: cluster once, then every lag and macrostate count."""
+def _limit_threads(n):
     try:
         from threadpoolctl import threadpool_limits
 
-        limiter = threadpool_limits(args["threads"]) if args.get("threads") else None
+        return threadpool_limits(n) if n else None
     except Exception:  # pragma: no cover
-        limiter = None
-    from .msm import cluster_microstates, estimate_msm, map_microstates
+        return None
+
+
+def _cluster_cell(args: dict) -> dict:
+    """Phase 1: k-means microstates for one featurizer x microstate count, saved for the lag tasks."""
+    limiter = _limit_threads(args.get("threads"))
+    from .msm import cluster_microstates
 
     t0 = time.perf_counter()
-    X = np.load(args["features"], mmap_mode="r")
-    X = np.asarray(X)
-    proof = args["proof"]
-    lab, n_lab = args["lab"], args["n_lab"]
-    seed = args["seed"]
-    km = cluster_microstates(X, args["n_micro"], seed, args.get("batch_size", 2048), args.get("n_init", 3))
-    micro = km.labels_.astype(np.int64)
-    centers = km.cluster_centers_
+    X = np.asarray(np.load(args["features"], mmap_mode="r"))
+    km = cluster_microstates(X, args["n_micro"], args["seed"], args.get("batch_size", 2048), args.get("n_init", 3))
+    np.save(args["micro_path"], km.labels_.astype(np.int64))
+    np.save(args["centers_path"], km.cluster_centers_)
+    if limiter is not None:
+        limiter.restore_original_limits()
+    return {"spec": args["spec"], "n_micro": args["n_micro"], "seconds": round(time.perf_counter() - t0, 1)}
+
+
+def _lag_cell(args: dict) -> list[dict]:
+    """Phase 2: one featurizer x microstate count x lag, over every macrostate count.
+
+    PCCA+ is the slow step (it grows steeply with k), so it runs once per k and
+    the same memberships feed the Chapman-Kolmogorov test, exactly as
+    deeptime's ``MarkovStateModel.ck_test`` would build them.
+    """
+    limiter = _limit_threads(args.get("threads"))
+    from deeptime.markov._base import MembershipsObservable
+    from deeptime.util.validation import ck_test
+
+    from .msm import estimate_msm, map_microstates
+
+    t0 = time.perf_counter()
+    micro = np.load(args["micro_path"])
+    centers = np.load(args["centers_path"])
     n_micro = centers.shape[0]
-    bounds = np.flatnonzero(np.diff(proof)) + 1
-    dtrajs = [np.asarray(t, dtype=np.int64) for t in np.split(micro, bounds)]
+    proof, lab, n_lab, lag = args["proof"], args["lab"], args["n_lab"], int(args["lag"])
+    dtrajs = [np.asarray(t, dtype=np.int64) for t in np.split(micro, np.flatnonzero(np.diff(proof)) + 1)]
     lens = np.array([len(d) for d in dtrajs])
-    micro_scores = scores(micro, n_micro, lab, n_lab, with_ami=False)
-    models: dict[int, Any] = {}
 
     def model(L: int):
-        if L not in models:
-            try:
-                models[L] = estimate_msm(dtrajs, L, n_micro, args.get("reversible", True))[0]
-            except (ValueError, np.linalg.LinAlgError, RuntimeError):
-                models[L] = None
-        return models[L]
+        try:
+            return estimate_msm(dtrajs, L, n_micro, args.get("reversible", True))[0]
+        except (ValueError, np.linalg.LinAlgError, RuntimeError):
+            return None
 
+    msm = model(lag)
+    if msm is None:
+        return []
+    nxt = model(lag + 1)
+    ck_models = [msm] + [m for m in (model(j * lag) for j in range(2, args["ck_mlags"] + 1)) if m is not None]
+    connected = np.asarray(msm.count_model.state_symbols, dtype=np.int64)
+    kept = float(np.isin(micro, connected).mean())
+    micro_nmi = scores(micro, n_micro, lab, n_lab, with_ami=False)["nmi"]
+    ts_all = msm.timescales(min(max(args["ks"]) + 1, msm.n_states - 1))
+    ts_next = nxt.timescales(min(max(args["ks"]) + 1, nxt.n_states - 1)) if nxt is not None else None
     out = []
-    for lag in args["lags"]:
-        msm = model(lag)
-        if msm is None:
+    for k in args["ks"]:
+        if k < 2 or k > msm.n_states - 1:
             continue
-        connected = np.asarray(msm.count_model.state_symbols, dtype=np.int64)
-        kept = float(np.isin(micro, connected).mean())
-        ck_models = [msm] + [model(m * lag) for m in range(2, args["ck_mlags"] + 1)]
-        ck_models = [m for m in ck_models if m is not None]
-        model(lag + 1)
-        ts_all = msm.timescales(min(21, msm.n_states - 1))
-        for k in args["ks"]:
-            if k < 2 or k > msm.n_states - 1:
-                continue
-            row = {"featurizer": args["spec"], "n_microstates": n_micro, "lag": lag, "k": k,
-                   "fraction_steps_connected": kept,
-                   "share_proofs_longer_than_ck_window": float((lens > lag * args["ck_mlags"]).mean())}
-            try:
-                pcca = msm.pcca(k)
-                macro_c, member, _ = map_microstates(n_micro, connected, pcca.assignments, pcca.memberships,
-                                                     centers, "nearest")
-            except Exception as exc:  # PCCA+ can fail on degenerate or complex spectra
-                row["error"] = f"pcca: {type(exc).__name__}"
-                out.append(row)
-                continue
-            pred = macro_c[micro]
-            s = scores(pred, k, lab, n_lab)
-            row.update({"nmi": s["nmi"], "ari": s["ari"], "ami": s["ami"], "n_scored": s["n"],
-                        "n_groups_used": s["n_groups"],
-                        "microstate_nmi": micro_scores["nmi"],
-                        "pcca_membership": float(np.nanmean(member[micro]))})
-            n_slow = k - 1
-            row["timescale_slowest_used"] = float(ts_all[n_slow - 1]) if len(ts_all) >= n_slow else float("nan")
-            row["gap_ratio"] = (float(ts_all[n_slow - 1] / ts_all[n_slow]) if len(ts_all) > n_slow
-                                else float("nan"))
-            row["its_rel_change"] = _its_rel(models, lag, lag + 1, n_slow)
-            ck_err = float("nan")
-            ck_err_2 = float("nan")
-            if len(ck_models) >= 2:
-                try:
-                    ck = msm.ck_test(ck_models, k, include_lag0=False)
-                    diff = np.abs(np.real(np.asarray(ck.predictions)) - np.real(np.asarray(ck.estimates)))
-                    ck_err = float(diff.max())
-                    ck_err_2 = float(diff[:2].max())
-                except Exception as exc:
-                    row["error"] = f"ck: {type(exc).__name__}"
-            row["ck_max_error"] = ck_err
-            row["ck_max_error_2lags"] = ck_err_2
-            row["ck_lags_tested"] = len(ck_models)
+        t_k = time.perf_counter()
+        row = {"featurizer": args["spec"], "n_microstates": n_micro, "lag": lag, "k": k,
+               "fraction_steps_connected": kept,
+               "share_proofs_longer_than_ck_window": float((lens > lag * args["ck_mlags"]).mean()),
+               "microstate_nmi": micro_nmi}
+        try:
+            pcca = msm.pcca(k)
+            macro_c, member, _ = map_microstates(n_micro, connected, pcca.assignments, pcca.memberships,
+                                                 centers, "nearest")
+        except Exception as exc:  # PCCA+ can fail on degenerate or complex spectra
+            row["error"] = f"pcca: {type(exc).__name__}"
             out.append(row)
+            continue
+        pred = macro_c[micro]
+        sc = scores(pred, k, lab, n_lab)
+        row.update({"nmi": sc["nmi"], "ari": sc["ari"], "ami": sc["ami"], "n_scored": sc["n"],
+                    "n_groups_used": sc["n_groups"], "pcca_membership": float(np.nanmean(member[micro]))})
+        n_slow = k - 1
+        row["timescale_slowest_used"] = float(ts_all[n_slow - 1]) if len(ts_all) >= n_slow else float("nan")
+        row["gap_ratio"] = float(ts_all[n_slow - 1] / ts_all[n_slow]) if len(ts_all) > n_slow else float("nan")
+        if ts_next is not None and len(ts_next) >= n_slow and len(ts_all) >= n_slow:
+            row["its_rel_change"] = float(np.max(np.abs(ts_next[:n_slow] - ts_all[:n_slow]) / ts_all[:n_slow]))
+        else:
+            row["its_rel_change"] = float("nan")
+        row["ck_max_error"] = row["ck_max_error_2lags"] = float("nan")
+        if len(ck_models) >= 2:
+            try:
+                obs = MembershipsObservable(msm, pcca.memberships, initial_distribution=msm.stationary_distribution)
+                ck = ck_test(ck_models, obs, test_model=msm, include_lag0=False)
+                diff = np.abs(np.real(np.asarray(ck.predictions)) - np.real(np.asarray(ck.estimates)))
+                row["ck_max_error"] = float(diff.max())
+                row["ck_max_error_2lags"] = float(diff[:2].max())
+            except Exception as exc:
+                row["error"] = f"ck: {type(exc).__name__}"
+        row["ck_lags_tested"] = len(ck_models)
+        row["seconds"] = round(time.perf_counter() - t_k, 2)
+        out.append(row)
     for r in out:
-        r["seconds_cell"] = round(time.perf_counter() - t0, 2)
+        r["seconds_task"] = round(time.perf_counter() - t0, 1)
     if limiter is not None:
         limiter.restore_original_limits()
     return out
+
+
+def _run_tasks(fn, tasks: list[dict], jobs: int, label: str, log: Callable[[str], None]) -> list:
+    """Run ``fn`` over ``tasks``, in ``jobs`` spawned processes when jobs > 1, logging as each finishes."""
+    t0 = time.perf_counter()
+    results = []
+    if jobs > 1 and len(tasks) > 1:
+        import multiprocessing as mp
+        from concurrent.futures import as_completed
+
+        # spawn, not fork: the parent holds BLAS threads, and spawn behaves the same on macOS and Linux
+        with ProcessPoolExecutor(max_workers=jobs, mp_context=mp.get_context("spawn")) as ex:
+            futs = [ex.submit(fn, t) for t in tasks]
+            for i, f in enumerate(as_completed(futs), 1):
+                results.append(f.result())
+                log(f"sweep: {label} {i}/{len(tasks)} ({time.perf_counter() - t0:.0f}s)")
+    else:
+        for i, t in enumerate(tasks, 1):
+            results.append(fn(t))
+            log(f"sweep: {label} {i}/{len(tasks)} ({time.perf_counter() - t0:.0f}s)")
+    return results
+
+
+def run_sweep(inp: PilotInputs, cfg: RobustnessConfig, work: Path, lab: np.ndarray, n_lab: int,
+              log: Callable[[str], None] = print) -> tuple[pd.DataFrame, dict[str, np.ndarray]]:
+    """The full grid.  Features are computed once per featurizer, microstates once per featurizer x count,
+    and the PCCA+-heavy part runs one task per featurizer x count x lag."""
+    work.mkdir(parents=True, exist_ok=True)
+    texts = inp.steps["state_before"].fillna("").astype(str).tolist()
+    proof, _ = codes(inp.assignments["proof_id"])
+    arrays: dict[str, np.ndarray] = {}
+    rc = inp.report.get("config", {})
+    threads = 1 if cfg.jobs > 1 else None
+    clusters = []
+    for spec in cfg.featurizers:
+        safe = spec.replace(":", "_").replace("/", "_")
+        path = work / f"features_{safe}.npy"
+        t0 = time.perf_counter()
+        X = featurize(texts, spec, cfg.seed)
+        np.save(path, X)
+        arrays[spec] = X
+        log(f"sweep: features {spec} {X.shape} in {time.perf_counter() - t0:.0f}s")
+        for m in cfg.microstates:
+            clusters.append({"features": str(path), "spec": spec, "n_micro": int(m),
+                             "micro_path": str(work / f"micro_{safe}_{m}.npy"),
+                             "centers_path": str(work / f"centers_{safe}_{m}.npy"),
+                             "seed": int(rc.get("seed", cfg.seed)), "batch_size": int(rc.get("kmeans_batch_size", 2048)),
+                             "n_init": int(rc.get("kmeans_n_init", 3)), "threads": threads})
+    log(f"sweep: clustering {len(clusters)} featurizer x microstate cells, {cfg.jobs} at a time")
+    _run_tasks(_cluster_cell, clusters, cfg.jobs, "microstates", log)
+    # the slowest tasks (large k, many microstates) first, so the pool stays busy to the end
+    tasks = [{"micro_path": c["micro_path"], "centers_path": c["centers_path"], "spec": c["spec"], "lag": int(L),
+              "ks": list(cfg.macrostates), "ck_mlags": cfg.ck_mlags, "proof": proof, "lab": lab, "n_lab": n_lab,
+              "reversible": bool(rc.get("reversible", True)), "threads": threads}
+             for c in sorted(clusters, key=lambda c: -c["n_micro"]) for L in cfg.lags]
+    log(f"sweep: {len(tasks)} model tasks (x {len(cfg.lags)} lags), each over k {cfg.macrostates[0]}.."
+        f"{cfg.macrostates[-1]}")
+    rows = [r for res in _run_tasks(_lag_cell, tasks, cfg.jobs, "models", log) for r in res]
+    return add_checks(pd.DataFrame(rows), cfg), arrays
 
 
 def add_checks(sweep: pd.DataFrame, cfg: RobustnessConfig) -> pd.DataFrame:
@@ -739,49 +808,6 @@ def add_checks(sweep: pd.DataFrame, cfg: RobustnessConfig) -> pd.DataFrame:
     s["n_checks_passed"] = s[checks].sum(axis=1)
     s["all_checks_passed"] = s[checks].all(axis=1)
     return s
-
-
-def run_sweep(inp: PilotInputs, cfg: RobustnessConfig, work: Path, lab: np.ndarray, n_lab: int,
-              log: Callable[[str], None] = print) -> tuple[pd.DataFrame, dict[str, np.ndarray]]:
-    """The full grid.  Features are computed once per featurizer and shared with the workers on disk."""
-    work.mkdir(parents=True, exist_ok=True)
-    texts = inp.steps["state_before"].fillna("").astype(str).tolist()
-    proof, _ = codes(inp.assignments["proof_id"])
-    feats: dict[str, Path] = {}
-    arrays: dict[str, np.ndarray] = {}
-    for spec in cfg.featurizers:
-        safe = spec.replace(":", "_").replace("/", "_")
-        path = work / f"features_{safe}.npy"
-        t0 = time.perf_counter()
-        X = featurize(texts, spec, cfg.seed)
-        np.save(path, X)
-        feats[spec] = path
-        arrays[spec] = X
-        log(f"sweep: features {spec} {X.shape} in {time.perf_counter() - t0:.0f}s")
-    rc = inp.report.get("config", {})
-    tasks = [{"features": str(feats[spec]), "spec": spec, "n_micro": int(m), "lags": list(cfg.lags),
-              "ks": list(cfg.macrostates), "ck_mlags": cfg.ck_mlags, "proof": proof, "lab": lab, "n_lab": n_lab,
-              "seed": int(rc.get("seed", cfg.seed)), "batch_size": int(rc.get("kmeans_batch_size", 2048)),
-              "n_init": int(rc.get("kmeans_n_init", 3)), "reversible": bool(rc.get("reversible", True)),
-              "threads": 1 if cfg.jobs > 1 else None}
-             for spec in cfg.featurizers for m in cfg.microstates]
-    log(f"sweep: {len(tasks)} cells ({len(cfg.featurizers)} featurizers x {len(cfg.microstates)} microstate counts), "
-        f"each over lags {cfg.lags} and k {cfg.macrostates[0]}..{cfg.macrostates[-1]}, {cfg.jobs} at a time")
-    rows: list[dict] = []
-    t0 = time.perf_counter()
-    if cfg.jobs > 1 and len(tasks) > 1:
-        import multiprocessing as mp
-
-        # spawn, not fork: the parent holds BLAS threads, and spawn behaves the same on macOS and Linux
-        with ProcessPoolExecutor(max_workers=cfg.jobs, mp_context=mp.get_context("spawn")) as ex:
-            for i, res in enumerate(ex.map(_sweep_cell, tasks), 1):
-                rows.extend(res)
-                log(f"sweep: {i}/{len(tasks)} cells done ({time.perf_counter() - t0:.0f}s)")
-    else:
-        for i, t in enumerate(tasks, 1):
-            rows.extend(_sweep_cell(t))
-            log(f"sweep: {i}/{len(tasks)} cells done ({time.perf_counter() - t0:.0f}s)")
-    return add_checks(pd.DataFrame(rows), cfg), arrays
 
 
 def sweep_summary(sweep: pd.DataFrame, report: dict, folder_nmi: float) -> dict:
@@ -1114,6 +1140,13 @@ def write_markdown(summary: dict, path: Path) -> None:
         lines += ["## Judge ceiling", "",
                   f"{c['judges'][0]} vs {c['judges'][1]} on {c['n_steps']} steps: NMI {_fmt(c['nmi'])}, "
                   f"ARI {_fmt(c['ari'])}, kappa {_fmt(c['kappa'])}, raw agreement {_fmt(c['raw_agreement'])}.", ""]
+    pj = pd.DataFrame(b.get("per_judge", []))
+    if len(pj):
+        lines += ["Against each judge alone (compare with the judge-vs-judge ceiling, not with the consensus scores):",
+                  "", "| judge | grouping | NMI | ARI |", "|---|---|---|---|"]
+        for _, r in pj.iterrows():
+            lines.append(f"| {r['judge']} | {r['grouping']} | {_fmt(r['nmi'])} | {_fmt(r['ari'])} |")
+        lines.append("")
     d = summary.get("label_dynamics", {})
     if d:
         lines += [f"Judges' areas change on {_fmt(d['change_rate'])} of within-proof steps; "
@@ -1132,6 +1165,13 @@ def write_markdown(summary: dict, path: Path) -> None:
                   "Chapman-Kolmogorov pass rate by lag: " + ", ".join(
                       f"lag {k}: {_fmt(v, 2)}" for k, v in s["ck_pass_rate_by_lag"].items()) + ".", "",
                   f"Settings where every check passes: {s['all_checks_settings']['n']}.", ""]
+        best = s["all_checks_settings"]["best"]
+        if best:
+            lines += ["Best of those by NMI:", "", "| featurizer | microstates | lag | k | NMI | ARI | max CK error |",
+                      "|---|---|---|---|---|---|---|"]
+            lines += [f"| {r['featurizer']} | {r['n_microstates']} | {r['lag']} | {r['k']} | {_fmt(r['nmi'])} | "
+                      f"{_fmt(r['ari'])} | {_fmt(r['ck_max_error'])} |" for r in best]
+            lines.append("")
     mem = summary.get("memory", [])
     if mem:
         lines += ["## Memory (held-out log-likelihood per step, nats)", "",
