@@ -50,6 +50,7 @@ Each figure is a function in `src/markov_lean/figures.py` that takes arrays or D
 | `judge_confusion.pdf` | `judge_cluster_confusion(macrostate, msc)` | `assignments.macrostate` and `labels.msc` merged on `proof_id, step`; NMI is `fig.nmi`, for the caption |
 | `area_flow.pdf` | `area_flow(area_transitions(assignments))` | consecutive steps' areas within each proof |
 | `search_ablation.pdf` | `search_ablation(results, group_col="benchmark")` | long-form: one row per method, benchmark and seed |
+| `switches.pdf`, `table_switches.tex` | `markov-lean switches` (`markov_lean.switches.draw`), copied in by `markov-lean paper` | a switches run's `switches.json`, `switches.pdf` and `table_switches.tex`; see `docs/switches.md` |
 | `case_studies.pdf`, `case_studies_table.tex` | `markov-lean cases --run results/pilot3 --out paper/figures` (`markov_lean.cases`) | a pilot run's `judge/sample_steps.parquet` and `judge/labels.parquet`; the table is a `tabular` the appendix reads with `\maybetable{}` |
 
 Figures use seaborn's `ticks` style at `paper` scale with a sans-serif font: Arial, falling back to Helvetica, Liberation Sans or DejaVu Sans where Arial isn't installed. Default sizes fit the ICML column (3.25 in); `figures.TEXT_WIDTH` (6.75 in) is the full width. Every figure is drawn inside `figures.paper_rc()`, so global matplotlib settings are left alone; call `figures.use_paper_style()` to get the same look in a notebook.

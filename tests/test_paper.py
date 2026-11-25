@@ -73,7 +73,7 @@ def _write_search(root: Path, gain: float = 0.25):
                 (d / "summary.jsonl").write_text("\n".join(lines) + "\n")
 
 
-def make_results(root: Path, *, search: bool = True) -> Path:
+def make_results(root: Path, *, search: bool = True, switches: bool = True) -> Path:
     pilot = root / "pilot3"
     assign = _write_msm(pilot / "msm")
     (pilot / "judge").mkdir(parents=True)
@@ -102,6 +102,10 @@ def make_results(root: Path, *, search: bool = True) -> Path:
                   "ari": [0.2, 0.05, -0.001]}).to_csv(rob / "baselines.csv", index=False)
     (rob / "robustness.json").write_text(json.dumps({"judge_ceiling": {"nmi": 0.55, "kappa": 0.6}}))
     shutil.copyfile(REPO / "paper" / "figures" / "preview" / "area_flow.pdf", rob / "figures" / "baselines_nmi.pdf")
+    if switches:  # `markov-lean switches` on the pilot itself: judge labels and macrostates
+        from markov_lean import switches as S
+
+        S.run(pilot, n_perm=19, n_boot=20, verbose=False)
     (root / "bridges").mkdir()
     shutil.copyfile(REPO / "paper" / "figures" / "preview" / "area_flow.pdf", root / "bridges" / "bridges.pdf")
     if search:
@@ -160,6 +164,12 @@ def test_every_input_fills_figures_tables_and_numbers(tmp_path, paper_dir):
     assert v["resSearchGainMiniF"] == "$+25.0$~points"
     assert "resSearchGainProofNet" not in v  # the paper uses PutnamBench, so no ProofNet macros unless it runs
     assert int(v["resFlowsShown"]) >= 1 and 0 < int(v["resFlowCoverage"]) <= 100
+    head = json.loads((results / "pilot3" / "switches" / "switches.json").read_text())["headline"]
+    assert v["resSwitchJudgeProofs"] == "30" and v["resSwitchMacroProofs"] == "30"
+    assert v["resSwitchJudgeHas"] == f"{100 * head['judge']['has_switch']:.1f}"
+    assert v["resSwitchMacroRate"] == f"{head['macrostate']['switch_rate']:.3f}"
+    assert v["resSwitchMacroRateShuffleP"] == f"{head['macrostate']['p_switch_rate_shuffle']:.3f}"
+    assert v["resSwitchJudgeHasLo"] == f"{100 * head['judge']['has_switch_ci95'][0]:.1f}"
 
     data = (figs / "table_data.tex").read_text()
     assert "8{,}423 & 101{,}234" in data and "200 & 3{,}000" in data
@@ -172,6 +182,9 @@ def test_every_input_fills_figures_tables_and_numbers(tmp_path, paper_dir):
     assert lines[0].startswith(r"  LM only") and "25.0 & 25.0" in lines[0]
     assert "Area prior" in lines[1] and "50.0 & 50.0" in lines[1]
     assert "Random scores" in lines[2]
+    switches = (figs / "table_switches.tex").read_text()
+    assert switches.startswith(P.HEADER) and "Judge MSC" in switches and "Macrostate" in switches
+    assert r"\tbd" not in switches
 
 
 def test_discovery_prefers_labelled_pilot_and_full_model(tmp_path):
@@ -408,3 +421,85 @@ def test_tex_ci():
     assert P.tex_ci(0.312, 0.29, 0.34) == _ci("0.31", "0.29, 0.34")
     assert P.tex_ci(0.312) == "0.31" and P.tex_ci(float("nan"), 0.1, 0.2) == r"\tbd"
     assert P.tex_ci(-0.004, -0.01, 0.003) == _ci("0.00", "$-$0.01, 0.00")
+
+
+def _switch_run(d: Path, sources=("macrostate",), table: bool = True, figure: bool = True) -> Path:
+    """A hand-made `markov-lean switches` output folder."""
+    d.mkdir(parents=True)
+    head = {s: {"n_proofs": 8423, "has_switch": 0.0646, "has_switch_ci95": [0.0594, 0.0700], "switch_rate": 0.01166,
+                "mean_dwell": 14.53, "off_mode": 0.01425, "switch_rate_shuffle": 0.02154,
+                "p_switch_rate_shuffle": 0.001998, "has_switch_markov": 0.1137, "p_has_switch_markov": 0.001998,
+                "has_switch_pooled": 0.5653, "p_has_switch_pooled": 0.001998} for s in sources}
+    (d / "switches.json").write_text(json.dumps({"headline": head}))
+    if table:
+        (d / "table_switches.tex").write_text("\\begin{tabular}{l}\n  Macrostate \\\\\n\\end{tabular}\n")
+    if figure:
+        shutil.copyfile(REPO / "paper" / "figures" / "preview" / "switches.pdf", d / "switches.pdf")
+    return d
+
+
+def test_switches_discovery_and_override(tmp_path):
+    results = make_results(tmp_path / "results", search=False)
+    assert P.discover(results).switches == results / "pilot3" / "switches"  # judge labels as well as macrostates
+    other = _switch_run(tmp_path / "real-switches" / "train_main")
+    assert P.discover(results, switches=other).switches == other
+    bare = tmp_path / "bare"
+    _switch_run(bare / "switches")
+    assert P.discover(bare).switches == bare / "switches"
+    assert P.discover(tmp_path / "nothing").switches is None
+
+
+def test_switches_fill_the_paper(tmp_path, paper_dir):
+    run = _switch_run(tmp_path / "real-switches" / "train_main")
+    items = {(i.kind, i.name): i for i in P.run(tmp_path / "none", paper_dir, switches=run, verbose=False)}
+    figs = paper_dir / "figures"
+    assert items[("figure", "switches")].status == "real" and (figs / "switches.pdf").exists()
+    assert items[("table", "table_switches")].status == "real"
+    assert "Macrostate" in (figs / "table_switches.tex").read_text()
+    v = macros(figs / "results_macros.tex")
+    assert v["resSwitchMacroProofs"] == "8{,}423" and v["resSwitchMacroHas"] == "6.5"
+    assert v["resSwitchMacroHasLo"] == "5.9" and v["resSwitchMacroHasHi"] == "7.0"
+    assert v["resSwitchMacroRate"] == "0.012" and v["resSwitchMacroDwell"] == "14.5"
+    assert v["resSwitchMacroOffMode"] == "1.4" and v["resSwitchMacroHasPooled"] == "56.5"
+    assert v["resSwitchMacroRateShuffleP"] == "0.002"
+    # no judge labels and no noise floor in this run: those stay red dashes
+    assert v["resSwitchJudgeHas"] == r"\tbd" and v["resSwitchMacroOffModeNoise"] == r"\tbd"
+    # every other item is still a preview
+    assert items[("figure", "implied_timescales")].status == "preview"
+
+
+def test_switches_json_alone_rebuilds_the_table_and_keeps_the_figure_preview(tmp_path, paper_dir):
+    results = make_results(tmp_path / "results", search=False)
+    sw = results / "pilot3" / "switches"
+    (sw / "table_switches.tex").unlink()
+    (sw / "switches.pdf").unlink()
+    items = {(i.kind, i.name): i.status for i in P.run(results, paper_dir, verbose=False)}
+    assert items[("table", "table_switches")] == "real"
+    assert "Judge MSC" in (paper_dir / "figures" / "table_switches.tex").read_text()
+    assert items[("figure", "switches")] == "preview"
+
+
+def test_switches_stale_table_goes_back_to_preview(tmp_path, paper_dir):
+    run = _switch_run(tmp_path / "sw")
+    P.run(tmp_path / "none", paper_dir, switches=run, verbose=False)
+    assert (paper_dir / "figures" / "table_switches.tex").exists()
+    P.run(tmp_path / "none", paper_dir, verbose=False)
+    assert not (paper_dir / "figures" / "table_switches.tex").exists()
+
+
+def test_table_switches_preview_matches_code():
+    from markov_lean import switches as S
+
+    prev = (REPO / "paper" / "figures" / "preview" / "table_switches.tex").read_text()
+    assert prev == P.HEADER + " (preview).\n" + P.table_switches_preview_tex()
+    rows = [ln for ln in prev.splitlines() if ln.count("&") == 2 + len(S.NULLS)]
+    assert len(rows) == 1 + len(P.SWITCH_SOURCES) * len(S.STATS)  # header + one row per source and statistic
+    assert all(name in P.MACROS for name in ("resSwitchJudgeHas", "resSwitchMacroRateShuffleP"))
+
+
+def test_cli_paper_takes_every_input_flag(tmp_path, paper_dir):
+    assert cli.PAPER_INPUTS == P.INPUTS
+    run = _switch_run(tmp_path / "sw")
+    assert cli.main(["paper", "--results", str(tmp_path / "none"), "--paper", str(paper_dir),
+                     "--switches", str(run)]) == 0
+    assert (paper_dir / "figures" / "table_switches.tex").exists()

@@ -90,3 +90,48 @@ for $m = 10$ and the sweep over $m$; next-area prediction against the
   \centering\small
   \resultstable{table_areas}
 \end{table}
+
+\subsection{Do single proofs switch areas?}
+\label{sec:switches}
+% Floats and captions from `markov-lean switches` (wired in by `markov-lean paper`);
+% the heading and the body text are the author's to write.
+\todo{Somesh: a sentence or two on what the switch test shows. Numbers are in
+the \texttt{\textbackslash resSwitch...} macros: for example
+\texttt{\textbackslash resSwitchJudgeHas}\% of proofs switch at least once,
+against \texttt{\textbackslash resSwitchJudgeHasMarkov}\% under the Markov
+null.}
+
+\begin{table*}[t]
+  \caption{Within-proof area switching, each proof weighted equally.
+  Observed values carry 95\% bootstrap intervals over proofs; each null gives
+  its mean, with the two-sided permutation $p$ in parentheses. A switch is a
+  change of area between consecutive labelled steps; switches per move divide
+  a proof's switches by its length minus one; dwell is the number of steps
+  spent in one area before a switch. The shuffle null reorders each proof's
+  own areas, so it fixes the share of proofs with a switch and the share of
+  steps off the proof's main area; the Markov null draws from a first-order
+  chain fit per Mathlib folder and started at the proof's first area; the
+  folder pool deals each folder's areas out to its proofs at random; the noise
+  floor keeps each proof in its main area and moves each step to another
+  area with a probability set by the two judges' step agreement, so it
+  applies only to judge labels. Judge rows
+  cover \resSwitchJudgeProofs{} proofs and macrostate rows
+  \resSwitchMacroProofs{} proofs with at least two labelled steps.}
+  \label{tab:switches}
+  \centering\small
+  \setlength{\tabcolsep}{4pt}
+  \resultstable{table_switches}
+\end{table*}
+
+\begin{figure*}[t]
+  \centering
+  \maybefigure{switches}{0.8\linewidth}
+  \caption{Within-proof area switching against its nulls. Top: each statistic
+  of Table~\ref{tab:switches}, observed (points, 95\% bootstrap intervals over
+  proofs) and the mean under each null (bars). Bottom left, one panel per area source: the distribution of
+  dwell, the steps a proof stays in one area, observed and under each null, on
+  a log scale; runs at the ends of a proof are censored, under the nulls as
+  well. Bottom right: switches per move by proof length, observed and under
+  the shuffle null.}
+  \label{fig:switches}
+\end{figure*}

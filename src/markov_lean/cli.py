@@ -68,10 +68,14 @@ def _explore(rest: list[str]) -> int:
     return explore.main(rest)
 
 
+# Input folders of `markov-lean paper` (paper.INPUTS, kept here so the parser needs no heavy import).
+PAPER_INPUTS = ("pilot", "synthetic", "full", "msm", "search", "robustness", "significance", "bridges", "switches")
+
+
 def cmd_paper(args: argparse.Namespace) -> int:
     from markov_lean import paper
 
-    override = {k: getattr(args, k) for k in ("pilot", "synthetic", "full", "msm", "search", "robustness", "bridges")}
+    override = {k: getattr(args, k) for k in PAPER_INPUTS}
     paper.run(args.results, args.paper, dry_run=args.dry_run, redraw_previews=args.redraw_previews,
               main_condition=args.main_condition, baseline=args.baseline, flow_areas=args.flow_areas,
               strict=args.strict, **override)
@@ -232,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     pa = sub.add_parser("paper", help="rebuild the paper's figures, tables and numbers from the results that exist")
     pa.add_argument("--results", default=str(ROOT / "results"), help="folder holding the run outputs")
     pa.add_argument("--paper", default=str(ROOT / "paper"), help="paper folder (outputs go to <paper>/figures)")
-    for name in ("pilot", "synthetic", "full", "msm", "search", "robustness", "bridges"):
+    for name in PAPER_INPUTS:
         pa.add_argument(f"--{name}", default=None, help=f"use this {name} folder instead of searching --results")
     pa.add_argument("--main-condition", default="full", help="search condition reported as the area prior")
     pa.add_argument("--baseline", default="lm", help="search condition reported as the LM prior alone")
