@@ -75,8 +75,9 @@ CONDITION_LABELS = {
     "random_l0.3": (r"Random scores ($\lambda = 0.3$)", "random scores"),
 }
 BENCHMARK_LABELS = {"minif2f": "miniF2F", "proofnet": "ProofNet", "putnam": "PutnamBench"}
-# Benchmarks whose macros always exist, so the text can use them before any run.
-BENCHMARK_MACROS = {"minif2f": "MiniF", "proofnet": "ProofNet", "putnam": "Putnam"}
+# Benchmarks whose macros always exist, so the text can use them before any run.  ProofNet is not one
+# (the paper uses PutnamBench); a run on it still gets its macros, named from the benchmark.
+BENCHMARK_MACROS = {"minif2f": "MiniF", "putnam": "Putnam"}
 
 # Every headline number: macro name -> what it is.  Missing ones print as \tbd.
 MACROS: dict[str, str] = {
@@ -339,7 +340,8 @@ def tex_escape(s: str) -> str:
 
 
 def macro_suffix(benchmark: str) -> str:
-    return BENCHMARK_MACROS.get(benchmark) or "".join(w.capitalize() for w in re.findall(r"[A-Za-z]+", benchmark))
+    known = {**BENCHMARK_MACROS, "proofnet": "ProofNet"}
+    return known.get(benchmark) or "".join(w.capitalize() for w in re.findall(r"[A-Za-z]+", benchmark))
 
 
 # --------------------------------------------------------------------------- tables

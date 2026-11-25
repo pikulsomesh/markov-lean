@@ -58,6 +58,6 @@ Each is a macro that prints a red dash until its run is in. The full list, with 
 | `\resSyntheticNMI` | macrostates against the planted areas |
 | `\resFlowsShown`, `\resFlowCoverage` (%) | the flow figure's caption |
 | `\resSearchSeeds` | seeds per problem |
-| `\resSearchBase<B>`, `\resSearchArea<B>`, `\resSearchGain<B>` | pass@1 (%) with the LM prior, with the area prior, and the difference in points, for `<B>` = `MiniF`, `ProofNet`, `Putnam` |
+| `\resSearchBase<B>`, `\resSearchArea<B>`, `\resSearchGain<B>` | pass@1 (%) with the LM prior, with the area prior, and the difference in points, for `<B>` = `MiniF`, `Putnam` (any other benchmark that runs gets its own, named from it) |
 
 Use a macro followed by `{}` when a word comes next (`\resSearchSeeds{} seeds`), so TeX keeps the space.
