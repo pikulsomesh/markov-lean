@@ -1,0 +1,17 @@
+# Phase 2 pilot: does a Markov state model over goal states find areas that match MSC labels?
+data:
+  source: leandojo
+  split: train
+  max_proofs: 20000        # keeps the run within the Mac Mini's 16 GB
+featurize:
+  method: tfidf_svd
+  svd_dim: 128
+msm:
+  n_microstates: 200
+  lag: 1
+  n_macrostates: [6, 8, 12]  # compared by implied timescales gap
+judge:
+  sample_proofs: 1000      # labeled by both judges for NMI/ARI
+eval:
+  baselines: [folder]
+  gate_nmi: 0.15           # gate 1: go to search phase only if macrostates beat the folder baseline and clear this
