@@ -329,7 +329,7 @@ def judge_cluster_confusion(
     score = nmi(c.to_numpy(), j.astype(str).to_numpy())
     table = pd.crosstab(c, j)
     if normalize == "row":
-        shown = table.div(table.sum(1), axis=0)
+        shown = table.div(table.sum(axis=1), axis=0)
     elif normalize == "all":
         shown = table / table.to_numpy().sum()
     elif normalize is None:
