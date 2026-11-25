@@ -36,6 +36,28 @@ $\pi = (1-\lambda)\,p_{\mathrm{LM}} + \lambda\,p_{\mathrm{area}}$, with
 $\lambda = 0.3$, $\alpha = 0.5$ and $w = 8$. \todo{report $\beta$ and the
 progress threshold, and how $\lambda$ was chosen (validation split only).}
 
+\begin{algorithm}[t]
+  \caption{Best-first search with the area prior.}
+  \label{alg:search}
+  \begin{algorithmic}[1]
+    \REQUIRE theorem $s_0$, prover $p_{\mathrm{LM}}$, coarse matrix $\T_{\mathrm{c}}$, mix $\lambda$
+    \STATE $Q \gets \{(s_0, 0)\}$; $v \gets \mathbf{0}$
+    \WHILE{$Q \neq \emptyset$ and budget remains}
+      \STATE pop the highest-scoring $(s, c)$ from $Q$
+      \STATE $g \gets$ target for $s$ from $a(s)$, $\T_{\mathrm{c}}$, $v$ and the stall term
+      \FORALL{tactic $t$ among 16 samples from $p_{\mathrm{LM}}(\cdot \mid s)$}
+        \STATE run $t$ in Lean; skip it on error or a repeated state
+        \IF{$t$ closes the goal}
+          \STATE \textbf{return} the proof
+        \ENDIF
+        \STATE $\pi(t) \gets (1-\lambda)\,p_{\mathrm{LM}}(t \mid s) + \lambda\,p_{\mathrm{area}}(t)$, with $p_{\mathrm{area}} \propto a(s')^{\top} g$
+        \STATE push $(s', c + \log \pi(t))$ onto $Q$; update $v$
+      \ENDFOR
+    \ENDWHILE
+    \STATE \textbf{return} failure
+  \end{algorithmic}
+\end{algorithm}
+
 \begin{figure}[t]
   \centering
   \maybefigure{search_ablation}{0.6\linewidth}
@@ -50,3 +72,23 @@ progress threshold, and how $\lambda$ was chosen (validation split only).}
 0.5\}$; a random partition with the same area sizes, to separate the
 effect of the areas from that of reweighting itself. Report results on the
 miniF2F (244) and ProofNet (186) test splits.}
+
+\begin{table}[t]
+  \caption{Problems solved (\%) under the same budget, mean over
+  \todo{n} seeds. Each ablation row switches off one factor of $g$.
+  \todo{fill from the search runs.}}
+  \label{tab:search}
+  \centering\small
+  \begin{tabular}{lcc}
+    \toprule
+    Prior & miniF2F & ProofNet \\
+    \midrule
+    LM only ($\lambda = 0$)           & \tbd & \tbd \\
+    Area prior ($\lambda = 0.3$)      & \tbd & \tbd \\
+    \quad without dynamics term       & \tbd & \tbd \\
+    \quad without visit term ($\alpha = 0$) & \tbd & \tbd \\
+    \quad without stall term ($\beta = 0$)  & \tbd & \tbd \\
+    Random partition, same sizes      & \tbd & \tbd \\
+    \bottomrule
+  \end{tabular}
+\end{table}
