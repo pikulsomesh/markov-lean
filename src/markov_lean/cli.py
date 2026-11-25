@@ -143,6 +143,12 @@ def _switches(rest: list[str]) -> int:
     return switches.main(rest)
 
 
+def _premise_labels(rest: list[str]) -> int:
+    from markov_lean import premise_areas
+
+    return premise_areas.main(rest)
+
+
 def _nonrev_check(rest: list[str]) -> int:
     from markov_lean import nonrev
 
@@ -174,6 +180,8 @@ PASSTHROUGH = {
     "gold-set": (_gold_set, "benchmark problems with MSC codes known from their metadata: build, summary, steps, eval-split"),
     "judge-accuracy": (_judge_accuracy, "accuracy, macro-F1 and confusion of MSC judges on the gold set"),
     "switches": (_switches, "within-proof area switching against shuffle, Markov, pooled and noise nulls"),
+    "premise-labels": (_premise_labels, "step areas from the Mathlib folders of the premises each tactic uses, "
+                                        "and the switch test on them (no API calls)"),
     "export-dataset": (_export_dataset, "write the labelled dataset release folder from a pilot run (no upload)"),
     "nonrev-check": (_nonrev_check, "reversible vs non-reversible (GPCCA) and absorbing MSMs on the same microstates"),
     "check-release": (_check_release, "check a release folder is complete, consistent and free of keys/paths"),
