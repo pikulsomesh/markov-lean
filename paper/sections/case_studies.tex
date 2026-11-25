@@ -1,0 +1,38 @@
+\section{Case studies}
+\label{app:cases}
+% DRAFT (Claude): awaits the author's rewrite. Figure and table are written by
+% `markov-lean cases --run results/pilot3 --out paper/figures`.
+
+Figure~\ref{fig:cases} and Table~\ref{tab:cases} show a few short proofs from
+the judged sample that clearly move between areas. A step's area is the
+\textsc{msc} code both judges gave its goal; it counts as confident when the
+judges agree and the lower of their two confidences is at least $0.7$. A
+confident switch is a pair of adjacent confident steps with different areas,
+and the tactic of the first step is the one that moved the goal. We keep proofs
+of 4 to 14 steps whose steps were all labelled, whose tactics are short enough
+to read, and on which the judges agree for at least 80\% of the steps; we rank
+them by confident switches, then agreement, then length, and where the sample
+allows take one proof per Mathlib file and only proofs that add a new pair of
+areas. The proofs are chosen to be readable, not typical; the
+switch rates in Section~\ref{sec:experiments} describe the typical proof.
+
+\begin{figure}[h]
+  \centering
+  \maybefigure{case_studies}{\linewidth}
+  \caption{Case-study proofs, one row per proof and one cell per step, coloured
+  by the judges' area for the goal before the step. Pale cells are steps where
+  the judges agree with low confidence; gray cells marked ``?'' are steps where
+  they disagree. Outlined cells start a confident switch, and their tactic,
+  shown by its first word under the cell, is in bold.}
+  \label{fig:cases}
+\end{figure}
+
+\begin{table}[h]
+  \centering
+  \caption{The case-study proofs of Figure~\ref{fig:cases}: theorem, Mathlib
+  file, the sequence of confident areas, and each switching tactic with its
+  step.}
+  \label{tab:cases}
+  \small
+  \maybetable{case_studies_table}
+\end{table}

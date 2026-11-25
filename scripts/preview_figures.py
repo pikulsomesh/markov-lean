@@ -89,7 +89,24 @@ def make_all(rng) -> list[tuple[str, object]]:
     df = pd.DataFrame(res, columns=["method", "benchmark", "solved"])
     out.append(("search_ablation", F.search_ablation(df, group_col="benchmark")))
 
+    # case studies: a few short proofs that cross areas, from a synthetic judged sample
+    from markov_lean import cases as C
+
+    picks = C.select(*C.synthetic_case_inputs(seed=0))
+    out.append((C.FIGURE_NAME, C.case_strips(picks.steps, max_steps=picks.config.max_steps)))
+
     return [(name, stamp(fig)) for name, fig in out]
+
+
+def write_tables(outdir) -> list[Path]:
+    """The LaTeX tables that go with the previews (the case-study table)."""
+    from markov_lean import cases as C
+
+    picks = C.select(*C.synthetic_case_inputs(seed=0))
+    path = Path(outdir) / f"{C.TABLE_NAME}.tex"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(C.latex_table(picks.picked))
+    return [path]
 
 
 def main(argv=None) -> None:
@@ -97,7 +114,7 @@ def main(argv=None) -> None:
     p.add_argument("--out", default=Path(__file__).resolve().parents[1] / "paper" / "figures" / "preview")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args(argv)
-    paths = F.save_all(make_all(np.random.default_rng(args.seed)), args.out)
+    paths = F.save_all(make_all(np.random.default_rng(args.seed)), args.out) + write_tables(args.out)
     for path in paths:
         print(path)
 

@@ -108,14 +108,31 @@ To stop a run: Ctrl-C. Finished problems are saved; rerun the same command to re
 
 ```bash
 .venv/bin/markov-lean search-report --runs results/search_eval
+# or several roots, or a glob of benchmark folders; the report goes to their common parent
+.venv/bin/markov-lean search-report --runs results/search_eval/* --out results/search_report \
+    --label 'lm=LM only ($\lambda = 0$)' --label 'area_l0.3=Area prior ($\lambda = 0.3$)'
 ```
 
-This writes to `results/search_eval/report/`: `pass_at_k.csv` and `pass_at_k.tex`
-(bootstrap 95% CIs over problems), `paired.csv` (each condition against `lm` on the
-problems both finished: exact McNemar with Holm correction, and a paired bootstrap of the
-difference), `by_area.csv` (by the Markov model's area of each problem's first goal state,
-or by miniF2F's problem group), `budget.csv`, `report.md`, and figures
-(`fig_pass_at_1.pdf`, `fig_budget.pdf`, `fig_by_area_<benchmark>.pdf`).
+`--runs` takes runs roots, benchmark, condition or seed folders, or `summary.jsonl` files.
+The output folder (default `<runs>/report`) gets:
+
+| file | what |
+|---|---|
+| `pass_at_k.csv`, `pass_at_k.tex` | pass@k per benchmark and condition, bootstrap 95% CIs over problems; the `.tex` is pass@1 with CIs, best per column in bold |
+| `pass_at_k_all.tex` | pass@k for every k reported (when there are several seeds) |
+| `paired.csv`, `paired.tex` | each condition against `lm` on the problems both finished: paired bootstrap of the pass@1 gain, exact McNemar with Holm correction |
+| `by_area.csv` | pass@1 by the Markov model's area of each problem's first goal state (`root_area`), or by miniF2F's problem group |
+| `by_area_gain.csv`, `by_area_gain.tex` | each condition's paired gain over `lm` within each area |
+| `budget.csv`, `budget_gain.csv` | share solved within each expansion budget, and the paired gain over `lm` at each budget, with CIs |
+| `search_stats.csv`, `search_stats.tex` | proof length (tactics), expansions to solve, nodes per run, stop reasons |
+| `effort.csv` | on runs both solved (same problem and seed): geometric-mean expansion ratio against `lm`, proof-length difference, Wilcoxon test |
+| `report.md` | all tables in one page |
+| figures | `fig_pass_at_1.pdf`, `fig_budget.pdf`, `fig_budget_gain.pdf`, `fig_effort.pdf`, and per benchmark `fig_by_area_<b>.pdf`, `fig_area_gain_<b>.pdf` |
+
+The `.tex` files are bare `tabular`s to `\input` inside a `table`. `--label NAME=LATEX` and
+`--bench-label NAME=LATEX` set row and column names (benchmarks default to miniF2F and
+PutnamBench). To try it without a GPU: `markov-lean search-report --runs tests/fixtures/search_runs/*`
+(synthetic runs, see `tests/search_fixture.py`).
 
 Copy results back to the Mac Mini before stopping the instance:
 
