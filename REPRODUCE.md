@@ -107,10 +107,10 @@ matching step, a card without the required YAML keys or with TODO items, and any
 that looks like a key or a local path (`/Users/...`, `/home/...`, `~/...`). Run it again after
 editing the card by hand, and rerun the export to refresh the checksums.
 
-Uploading to Hugging Face or Zenodo is a manual step from the checked folder. Before uploading:
-confirm the licence in the card (labels CC BY 4.0; goal states and tactics stay under Mathlib's
-Apache-2.0 and LeanDojo Benchmark 4's CC BY 2.0), and for the anonymous submission period keep the
-upload anonymous (the card names no author).
+Uploading to Hugging Face or Zenodo is a manual step from the checked folder. The labels are
+released under CC BY 4.0; goal states and tactics stay under Mathlib's Apache-2.0 and LeanDojo
+Benchmark 4's CC BY 2.0. For the anonymous submission period keep the upload anonymous (the card
+names no author).
 
 ## Tests
 
