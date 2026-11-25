@@ -276,6 +276,39 @@ def test_project_command_on_a_saved_model(processed, tmp_path):
     assert ds["search"]["n_proofs"] == 15 and ds["search"]["has_transitions"]
 
 
+def test_project_command_takes_paths_relative_to_where_it_runs(processed, tmp_path, monkeypatch):
+    """`markov-lean project --msm results/full/msm` from a folder other than the repo root
+    used to look in <repo>/results/full/msm; --msm and --dataset now follow the working directory."""
+    pytest.importorskip("deeptime")
+    from markov_lean import cli, full
+    from markov_lean.data import write_steps
+
+    d, _ = processed
+    cfg = _config(d, tmp_path)
+    full.run(cfg, tmp_path / "results" / "full", skip_projection=True, verbose=False)
+    found, _ = generate_steps(15, 21)
+    write_steps(found, tmp_path / "search", "found", "x")
+    cfg_path = tmp_path / "full.yaml"
+    cfg_path.write_text(yaml.safe_dump(cfg))
+    monkeypatch.chdir(tmp_path)
+    code = cli.main(["project", "--config", str(cfg_path), "--msm", "results/full/msm", "--out", "proj",
+                     "--dataset", "search=search/found_x.parquet"])
+    assert code == 0
+    report = json.loads((tmp_path / "proj" / "project_report.json").read_text())
+    assert report["msm_dir"] == str(tmp_path / "results" / "full" / "msm")
+    assert "search" in report["projected"]
+
+
+def test_cli_path_falls_back_to_the_repo_root(tmp_path, monkeypatch):
+    from markov_lean import full
+
+    monkeypatch.chdir(tmp_path)
+    assert full._cli_path("configs") == full.ROOT / "configs"          # only in the repo
+    (tmp_path / "configs").mkdir()
+    assert full._cli_path("configs") == tmp_path / "configs"           # here wins
+    assert full._cli_path("nowhere/msm") == tmp_path / "nowhere" / "msm"  # neither: say where it was looked for
+
+
 def test_cli_lists_full_and_project(capsys):
     from markov_lean import cli
 

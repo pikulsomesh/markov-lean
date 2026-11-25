@@ -23,10 +23,11 @@ creates cloud resources or spends money unless you ask for it with a flag (below
 | `pilot` | Mac, 16 GB | `data/processed/leandojo_train.parquet` | free | `results/pilot3/msm/`, `judge/sample_steps.parquet` |
 | `judge` | Mac | cached labels, **or** `ANTHROPIC_API_KEY` and `--run-judges` | free with cached labels; about **$78** to judge again | `results/pilot3/judge/labels.parquet` |
 | `score` | Mac | the labels | free | `results/pilot3/pilot_report.json` (gate 1, agreement) |
+| `analysis` | Mac | the labels | free | `results/pilot3/{robustness,significance,bridges}/`, `paper/figures/case_studies*` (`ROBUSTNESS_ARGS="--jobs 4"` passes options to `markov-lean robustness`) |
 | `full` | Mac, 16 GB | `data/processed/` | free | `results/full/` (model on all train proofs, cross-dataset analysis) |
 | `search` | **EC2 g6.xlarge** (L4 GPU) | `scripts/setup_ec2.sh`, `--run-search` | about **$30** (miniF2F core + PutnamBench subset) to **$46** (with ablations) of instance time | `results/search_eval/` |
 | `report` | Mac | the search runs, copied back | free | `results/search_eval/report/` |
-| `paper` | Mac | LaTeX for the PDF (`brew install --cask mactex-no-gui`) | free | `paper/figures/*.pdf`, `paper/tables/*.tex`, `paper/main.pdf` |
+| `paper` | Mac | LaTeX for the PDF (`brew install --cask mactex-no-gui`) | free | `paper/figures/` (figures, `table_*.tex`, `results_macros.tex`), `paper/main.pdf` |
 | `release` | Mac | the labels | free | `release/` (dataset folder, checked) |
 
 Run a subset with `--stage <name>` (repeatable) or `--from <name>` (that stage and everything
@@ -66,10 +67,11 @@ conditions need the Markov model: copy `results/pilot3/msm/` to the instance fir
 
 ## Which stage makes each table and figure
 
-`scripts/paper_assets.py` (the `paper` stage, or `make paper-assets`) builds every asset whose
-inputs exist and lists the rest as skipped. Figures go to `paper/figures/`, where `\maybefigure`
-uses them in place of the synthetic previews. Table bodies go to `paper/tables/`; paste them over
-the `\tbd` rows (or `\input` them).
+The `paper` stage runs `markov-lean paper --results results --paper paper`, which builds every
+figure, table and headline number whose inputs exist into `paper/figures/` (where `\maybefigure`,
+`\maybetable` and `results_macros.tex` pick them up in place of the synthetic previews) and lists
+the rest as previews. `scripts/paper_assets.py` (`make paper-assets`) is the older builder: it
+writes the table bodies below to `paper/tables/`, which `main.tex` does not read.
 
 | asset in the paper | file | made from | stage |
 |---|---|---|---|

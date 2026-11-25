@@ -61,6 +61,19 @@ def _path(p: str | Path | None, base: Path = ROOT) -> Path | None:
     return p if p.is_absolute() else base / p
 
 
+def _cli_path(p: str | Path) -> Path:
+    """A path given on the command line: relative to where the command runs, as ``--out`` is.
+
+    Falls back to the repo root (how config paths resolve) when nothing is there, so
+    running from the repo root behaves as before.
+    """
+    q = Path(p).expanduser()
+    if q.is_absolute():
+        return q
+    here = Path.cwd() / q
+    return here if here.exists() or not (ROOT / q).exists() else ROOT / q
+
+
 def load_config(path: str | Path) -> dict:
     import yaml
 
@@ -570,9 +583,9 @@ def run_project_only(config: dict, msm_dir: str | Path, out_dir: str | Path, *, 
         name, _, p = item.partition("=")
         if not p:
             raise ValueError(f"--dataset takes name=path, got {item!r}")
-        datasets.append({"name": name, "path": p, "min_steps": 1})
-    model = pj.load_model(_path(msm_dir))
-    msm_dir = _path(msm_dir)
+        datasets.append({"name": name, "path": str(_cli_path(p)), "min_steps": 1})
+    msm_dir = _cli_path(msm_dir)
+    model = pj.load_model(msm_dir)
     in_sample = None
     if (msm_dir / "assignments.parquet").exists() and pcfg.get("include_train", True):
         in_sample = (pcfg.get("train_name", "leandojo_train"), pd.read_parquet(msm_dir / "assignments.parquet"))

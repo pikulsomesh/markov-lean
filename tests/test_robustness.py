@@ -172,3 +172,19 @@ def test_missing_labels_explains(tmp_path):
     (tmp_path / "judge" / "labels.parquet").unlink()
     with pytest.raises(FileNotFoundError, match="labels"):
         rb.load_pilot(tmp_path)
+
+
+def test_ck_figure_when_pilot_setting_is_outside_the_sweep_grid():
+    """`robustness --quick` on a pilot fitted with 20 microstates sweeps only 100 and 200: the
+    CK-by-lag figure filtered to an empty table and crashed in legend() after the whole sweep."""
+    pytest.importorskip("matplotlib")
+    from markov_lean import robustness_figures as rf
+
+    sweep = pd.DataFrame([{"featurizer": "tfidf_svd:64", "n_microstates": m, "lag": lag, "k": k,
+                           "ck_max_error": 0.01 * lag + 0.001 * k}
+                          for m in (100, 200) for lag in (1, 2, 3) for k in (2, 4, 6)])
+    setting = {"featurizer": "tfidf_svd:32", "n_microstates": 20, "lag": 2, "k": 10}
+    fig = rf.ck_by_lag(sweep, setting, 0.1)
+    assert len(fig.axes[0].lines) >= 2  # one line per k, plus the tolerance line
+    fig = rf.ck_by_lag(sweep, setting, 0.1, ks=[10])  # a k the sweep never ran
+    assert fig.axes[0].get_legend() is not None

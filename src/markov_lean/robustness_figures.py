@@ -121,8 +121,12 @@ def ck_by_lag(sweep: pd.DataFrame, setting: dict, tol: float, ks: list[int] | No
     """Worst Chapman-Kolmogorov error against lag, one line per macrostate count."""
     s = sweep
     for col in ("featurizer", "n_microstates"):
-        if col in setting:
+        # the pilot's own setting may lie outside the sweep grid (e.g. --quick or --microstates):
+        # then keep the cells that are there rather than drawing an empty plot
+        if col in setting and (s[col] == setting[col]).any():
             s = s[s[col] == setting[col]]
+    if ks:
+        ks = [k for k in ks if (s["k"] == k).any()]
     ks = ks or sorted(s["k"].unique())[:: max(1, len(s["k"].unique()) // 5)]
     fig, ax = _new_ax(ax, figsize)
     for i, k in enumerate(ks):
@@ -132,8 +136,9 @@ def ck_by_lag(sweep: pd.DataFrame, setting: dict, tol: float, ks: list[int] | No
     ax.set_xlabel("lag (proof steps)")
     ax.set_ylabel("max CK error")
     ax.grid(axis="y")
-    ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=min(len(ks), 5), borderaxespad=0.2,
-              handlelength=1.2, columnspacing=0.8, fontsize="x-small")
+    if ks:
+        ax.legend(loc="lower left", bbox_to_anchor=(0, 1.0), ncol=min(len(ks), 5), borderaxespad=0.2,
+                  handlelength=1.2, columnspacing=0.8, fontsize="x-small")
     return fig
 
 
