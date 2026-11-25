@@ -10,3 +10,4 @@ lean/.lake/
 # secrets
 .env
 *.key
+data/processed/
