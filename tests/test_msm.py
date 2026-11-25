@@ -12,6 +12,7 @@ from markov_lean.msm import (
     ASSIGNMENT_COLUMNS,
     MSMConfig,
     choose_lag,
+    bootstrap_timescales,
     count_model,
     map_microstates,
     run,
@@ -38,7 +39,7 @@ def synthetic():
 def result(synthetic):
     steps, _ = synthetic
     t0 = time.perf_counter()
-    res = run(steps, MSMConfig(seed=0, bayesian_samples=20))
+    res = run(steps, MSMConfig(seed=0, error_samples=20))
     res.report["_wall"] = time.perf_counter() - t0
     return res
 
@@ -123,7 +124,7 @@ def test_automatic_choices_and_checks(result):
     assert rep["lag_chosen_by"] == "its_convergence"
     assert set(result.microstate_cv["n_microstates"]) == {25, 50, 100, 200}
     expected = {"connectivity", "sampling", "lag_vs_proof_length", "its_converged", "timescales_resolved",
-                "spectral_gap", "pcca_crisp", "chapman_kolmogorov", "bayesian_its_consistent"}
+                "spectral_gap", "pcca_crisp", "chapman_kolmogorov", "its_within_errors"}
     assert expected <= set(rep["checks"])
     failed = [k for k, c in rep["checks"].items() if not c["passed"]]
     assert rep["all_checks_passed"], failed
@@ -136,7 +137,7 @@ def test_checks_flag_a_model_without_areas():
     # two barely separated areas forced into four macrostates: the extra sets have no
     # slow process behind them, so convergence, resolution and spectral-gap checks fail
     steps, _ = generate(n_proofs=150, areas=["11", "26"], p_stay=0.5, noise=0.9, leak=0.0, seed=1)
-    res = run(steps, MSMConfig(n_microstates=20, n_macrostates=4, bayesian_samples=0, seed=1))
+    res = run(steps, MSMConfig(n_microstates=20, n_macrostates=4, error_samples=0, seed=1))
     failed = [k for k, c in res.report["checks"].items() if not c["passed"]]
     assert failed, res.report["checks"]
     assert not res.report["all_checks_passed"]
@@ -167,7 +168,7 @@ def test_largest_connected_set_excludes_one_way_states():
 def test_drop_mode_marks_disconnected(synthetic):
     steps, _ = synthetic
     small = steps[steps["proof_id"].isin(steps["proof_id"].unique()[:40])]
-    res = run(small, MSMConfig(n_microstates=60, lag=1, n_macrostates=3, disconnected="drop", bayesian_samples=0))
+    res = run(small, MSMConfig(n_microstates=60, lag=1, n_macrostates=3, disconnected="drop", error_samples=0))
     dropped = res.report["connected_set"]["dropped_microstates"]
     a = res.assignments
     # whether k-means leaves a sparse cluster outside the connected set depends on the
@@ -176,6 +177,30 @@ def test_drop_mode_marks_disconnected(synthetic):
     assert (a.loc[a["microstate"].isin(dropped), "macrostate"] == -1).all()
     assert (a.loc[~a["microstate"].isin(dropped), "macrostate"] >= 0).all()
     assert res.report["connected_set"]["n_kept"] + len(dropped) == res.report["n_microstates"]
+
+
+def test_checks_are_reproducible(synthetic):
+    # the same inputs and seed must give the same checks, error bars included
+    steps, _ = synthetic
+    small = steps[steps["proof_id"].isin(steps["proof_id"].unique()[:150])]
+    cfg = MSMConfig(n_microstates=25, lag=1, n_macrostates=6, error_samples=10, seed=0)
+    a, b = run(small, cfg).report, run(small, cfg).report
+    assert a["timescale_errors_steps"] == b["timescale_errors_steps"]
+    assert a["checks"] == b["checks"]
+
+
+def test_bootstrap_interval_brackets_mean():
+    dtrajs = [np.array([0, 0, 1, 1, 0, 1, 1, 0, 0, 1]) for _ in range(10)] + [np.array([1, 0, 0, 1, 1, 1, 0])] * 5
+    e = bootstrap_timescales(dtrajs, 1, 2, 1, 30, seed=0)
+    assert e["method"] == "bootstrap" and e["lower"][0] <= e["mean"][0] <= e["upper"][0]
+    assert e == bootstrap_timescales(dtrajs, 1, 2, 1, 30, seed=0)
+
+
+def test_deprecated_bayesian_samples_alias(synthetic):
+    steps, _ = synthetic
+    small = steps[steps["proof_id"].isin(steps["proof_id"].unique()[:60])]
+    rep = run(small, MSMConfig(n_microstates=20, lag=1, n_macrostates=3, bayesian_samples=0)).report
+    assert rep["timescale_errors_steps"] is None and "its_within_errors" not in rep["checks"]
 
 
 def test_save_writes_outputs(result, tmp_path):

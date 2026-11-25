@@ -22,7 +22,8 @@ about 6 tactic steps.
    coarse-grain with PCCA+;
 8. validate: connectivity, sampling per microstate, lag against proof length,
    implied-timescale convergence, resolved timescales, spectral gap, PCCA+
-   crispness, a Chapman-Kolmogorov test, and Bayesian MSM error bars.
+   crispness, a Chapman-Kolmogorov test, and timescale error bars (a seeded
+   bootstrap over proofs by default, so the checks are reproducible).
 
 Every check lands in ``report["checks"]`` with its value, threshold and
 pass/fail; ``report["all_checks_passed"]`` summarizes them.
@@ -38,6 +39,7 @@ deeptime calls used (checked against deeptime 0.5.0):
   ``coarse_grained_transition_matrix``, ``coarse_grained_stationary_probability``
 * ``MarkovStateModel.ck_test(models, n)`` -> ``predictions``, ``estimates``, ``lagtimes``
 * ``deeptime.markov.msm.BayesianMSM(n_samples).fit(counts).fetch_model().gather_stats("timescales", k=k)``
+  (only with ``error_method="bayesian"``; its sampler runs in C++ with no seed, so it is not reproducible)
 """
 
 from __future__ import annotations
@@ -81,7 +83,9 @@ class MSMConfig:
     ck_mlags: int = 4                 # CK test at lag, 2*lag, ..., ck_mlags*lag
     reversible: bool = True
     disconnected: str = "nearest"     # dropped microstates: "nearest" kept centroid's macrostate, or "drop" (-1)
-    bayesian_samples: int = 50        # 0 skips the Bayesian MSM error bars
+    error_samples: int = 50           # resamples for timescale error bars; 0 skips them
+    error_method: str = "bootstrap"   # "bootstrap" over proofs (seeded) or "bayesian" (deeptime BayesianMSM, unseeded)
+    bayesian_samples: int | None = None  # deprecated alias for error_samples
     # check thresholds
     min_counts_kept: float = 0.95
     min_visits: int = 10
@@ -284,9 +288,37 @@ def ck_test_table(msm: MarkovStateModel, dtrajs, lag, mlags, n_sets, n_states, r
     return pd.DataFrame(rows, columns=cols)
 
 
-def bayesian_timescales(dtrajs, lag, n_states, k, n_samples, seed, reversible=True) -> dict:
-    """Mean and 95% interval of the k slowest timescales from a Bayesian MSM."""
-    np.random.seed(seed)  # deeptime's sampler uses the global numpy RNG
+def bootstrap_timescales(dtrajs, lag, n_states, k, n_samples, seed, reversible=True) -> dict:
+    """Mean and 95% interval of the k slowest timescales, bootstrapping whole proofs.
+
+    Each resample draws proofs with replacement (a seeded numpy Generator) and
+    refits the maximum-likelihood MSM, so the same inputs always give the same
+    interval.  Resampling proofs rather than steps keeps within-proof
+    correlation intact.
+    """
+    usable = [d for d in dtrajs if len(d) > lag]
+    rng = np.random.default_rng(seed)
+    draws = np.full((n_samples, k), np.nan)
+    for b in range(n_samples):
+        idx = rng.integers(len(usable), size=len(usable))
+        try:
+            m, _ = estimate_msm([usable[i] for i in idx], lag, n_states, reversible)
+        except ValueError:
+            continue
+        t = m.timescales(min(k, m.n_states - 1))
+        draws[b, :len(t)] = t
+    return {"method": "bootstrap", "mean": np.nanmean(draws, 0).tolist(),
+            "lower": np.nanpercentile(draws, 2.5, 0).tolist(),
+            "upper": np.nanpercentile(draws, 97.5, 0).tolist(), "n_samples": n_samples}
+
+
+def bayesian_timescales(dtrajs, lag, n_states, k, n_samples, reversible=True) -> dict:
+    """Mean and 95% interval of the k slowest timescales from deeptime's Bayesian MSM.
+
+    deeptime 0.5.0 samples transition matrices in C++ without a seed, so this
+    interval changes from run to run; use ``bootstrap_timescales`` when the
+    result must be reproducible.
+    """
     # effective counts (deeptime's statistically uncorrelated count estimate) so the
     # posterior is not overconfident from overlapping sliding windows
     usable = [d for d in dtrajs if len(d) > lag]
@@ -294,7 +326,7 @@ def bayesian_timescales(dtrajs, lag, n_states, k, n_samples, seed, reversible=Tr
               .fit(usable).fetch_model().submodel_largest(directed=True))
     post = BayesianMSM(n_samples=n_samples, reversible=reversible).fit(counts).fetch_model()
     stats = post.gather_stats("timescales", k=k, confidence=0.95)
-    return {"mean": np.asarray(stats.mean).tolist(), "lower": np.asarray(stats.L).tolist(),
+    return {"method": "bayesian", "mean": np.asarray(stats.mean).tolist(), "lower": np.asarray(stats.L).tolist(),
             "upper": np.asarray(stats.R).tolist(), "n_samples": n_samples}
 
 
@@ -406,9 +438,15 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None) -> MSMResult:
     ck_err = float((ck["predicted"] - ck["estimated"]).abs().max()) if len(ck) else float("nan")
     n_slow = max(n_macro - 1, 1)
     ts = msm.timescales(min(cfg.n_its, msm.n_states - 1))
+    n_err = cfg.error_samples if cfg.bayesian_samples is None else cfg.bayesian_samples
     bayes = None
-    if cfg.bayesian_samples > 0:
-        bayes = bayesian_timescales(dtrajs, lag, n_micro, n_slow, cfg.bayesian_samples, cfg.seed, cfg.reversible)
+    if n_err > 0:
+        if cfg.error_method == "bootstrap":
+            bayes = bootstrap_timescales(dtrajs, lag, n_micro, n_slow, n_err, cfg.seed, cfg.reversible)
+        elif cfg.error_method == "bayesian":
+            bayes = bayesian_timescales(dtrajs, lag, n_micro, n_slow, n_err, cfg.reversible)
+        else:
+            raise ValueError("error_method must be 'bootstrap' or 'bayesian'")
     t_val = time.perf_counter()
 
     visits = np.bincount(micro, minlength=n_micro)[connected]
@@ -448,9 +486,9 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None) -> MSMResult:
         if len(nxt):
             t_next = nxt.sort_values("index")["timescale"].to_numpy()[:n_slow]
             inside = float(np.mean((t_next >= lo[:len(t_next)]) & (t_next <= hi[:len(t_next)])))
-        checks["bayesian_its_consistent"] = _check(
+        checks["its_within_errors"] = _check(
             inside is None or inside >= 0.5, inside, 0.5,
-            "share of the slow timescales at the next lag inside the 95% Bayesian interval at the chosen lag")
+            f"share of the slow timescales at the next lag inside the 95% {bayes['method']} interval at the chosen lag")
 
     report = {
         "time_unit": TIME_UNIT,
@@ -479,7 +517,7 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None) -> MSMResult:
             "reassigned_microstates": reassigned,
         },
         "timescales_steps": [float(t) for t in ts],
-        "bayesian_timescales_steps": bayes,
+        "timescale_errors_steps": bayes,
         "coarse_stationary": np.asarray(pcca.coarse_grained_stationary_probability).tolist(),
         "checks": checks,
         "all_checks_passed": bool(all(c["passed"] for c in checks.values())),
