@@ -11,7 +11,7 @@ tactic samples, runs each in Lean, and pushes every new goal state with
 score $\log \pi(a \mid s)$ added to its parent's, where $\pi$ is a prior
 over the candidates that produced a new state. With the baseline prior,
 $\pi$ is the softmax of the language model's log-probabilities. Each theorem
-gets at most 600 expansions, a depth of 64 and 600 seconds of wall time.
+gets at most 64 expansions, a depth of 32 and 300 seconds of wall time.
 
 \paragraph{Area prior.}
 The area prior reweights the same candidates by the area each one leads to.
@@ -33,8 +33,8 @@ metadynamics. A candidate leading to state $s'$ scores $a(s')^{\top} g(s)$;
 a candidate that closes the goal scores 1. The scores are normalized to a
 distribution $p_{\mathrm{area}}$ and mixed with the language model,
 $\pi = (1-\lambda)\,p_{\mathrm{LM}} + \lambda\,p_{\mathrm{area}}$, with
-$\lambda = 0.3$, $\alpha = 0.5$ and $w = 8$. \todo{report $\beta$ and the
-progress threshold, and how $\lambda$ was chosen (validation split only).}
+$\lambda = 0.3$, $\alpha = 0.5$, $\beta = 2$ and $w = 8$. \todo{how $\lambda$ was
+chosen (validation split only).}
 
 \begin{algorithm}[t]
   \caption{Best-first search with the area prior.}
@@ -63,13 +63,13 @@ progress threshold, and how $\lambda$ was chosen (validation split only).}
   \maybefigure{search_ablation}{0.6\linewidth}
   \caption{Problems solved under the same budget with the language-model
   prior alone and with the area prior. Error bars are 95\% bootstrap
-  intervals over \resSearchSeeds{} seeds.}
+  intervals over problems.}
   \label{fig:search}
 \end{figure}
 
 \paragraph{Ablations.}
 \todo{each factor of $g$ turned on alone, then all three together; $\lambda \in \{0, 0.1, 0.3,
-0.5\}$; a random partition with the same area sizes, to separate the
+0.6\}$; a random partition with the same area sizes, to separate the
 effect of the areas from that of reweighting itself. Report results on the
 miniF2F test split (244) and PutnamBench.}
 

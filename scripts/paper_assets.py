@@ -158,7 +158,7 @@ def table_data(pilot: Path, synthetic: Path, processed: Path) -> str | None:
     put = _count(processed / "putnam_test.parquet")[0]
     rows = [
         ("LeanDojo Benchmark 4", d.get("n_proofs"), d.get("n_steps"), "transitions"),
-        ("Lean Workbook", wb[0], wb[1], "judge validation"),
+        ("Lean Workbook", wb[0], wb[1], "projection"),
         ("Synthetic (planted)", syn.get("n_proofs"), syn.get("n_steps"), "sanity check"),
         None,
         ("miniF2F (test)", mini, "--", "search"),

@@ -26,6 +26,7 @@ Every input is optional. A `--<name> PATH` flag picks a folder instead of search
 | `--significance` | `markov-lean significance` (`<pilot>/significance`) | table 2: the within-proof shuffle null, and the intervals of the macrostate and folder rows when there is no robustness run |
 | `--bridges` | `markov-lean bridges` (`results/bridges`) | `bridges.pdf`, copied as is |
 | `--switches` | `markov-lean switches` (`<pilot>/switches`, else `results/switches`, else `<full>/switches`; the pilot's comes first because it has judge labels as well as macrostates) | the switching table (`table_switches.tex`, copied, or rebuilt from `switches.json` when only that is there), `switches.pdf` (copied), and the `\resSwitch...` numbers from `switches.json["headline"]` |
+| `--accuracy` | `markov-lean judge-accuracy --out` (`<pilot>/judge_accuracy`, else `results/judge_accuracy`, needing `judge_accuracy.json`) | the `\resGold...` numbers: gold-set sizes and each API judge's strict and family accuracy |
 
 `area_flow` uses the judges' MSC codes once labels exist and the macrostates before that (`--flow-areas` fixes one). Flows count only steps `t` and `t + 1` of the same proof.
 
@@ -66,5 +67,8 @@ Each is a macro that prints a red dash until its run is in. The full list, with 
 | `\resSwitch<S>RateShuffle`, `\resSwitch<S>RateShuffleP` | switches per move under the within-proof shuffle, and the two-sided p |
 | `\resSwitch<S>HasMarkov` (%), `\resSwitch<S>HasMarkovP`, `\resSwitch<S>HasPooled` (%), `\resSwitch<S>HasPooledP` | share of proofs with a switch under the Markov and folder-pool nulls, and the p of the observed share |
 | `\resSwitch<S>OffModeNoise` (%), `\resSwitch<S>OffModeNoiseP` | share off the main area under the noise floor (judge labels, or any source run with `--noise-rate`) |
+| `\resGoldProblems`, `\resGoldStrict`, `\resGoldFamily` | gold-set problems scored, those with one known MSC class, and those with a known group of classes |
+| `\resGoldAcc<J>` (%), `\resGoldAcc<J>Lo`, `\resGoldAcc<J>Hi`, `\resGoldFamAcc<J>` (%) | strict accuracy with its 95% interval over problems, and family accuracy, for `<J>` = `Haiku` or `Sonnet` (matched by that word in the judge's name) |
+| `\resGoldMajority` (%) | accuracy of always answering the largest strict class |
 
 Use a macro followed by `{}` when a word comes next (`\resSearchSeeds{} seeds`), so TeX keeps the space.

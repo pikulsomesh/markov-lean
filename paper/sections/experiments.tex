@@ -9,10 +9,10 @@ Trajectories come from the \texttt{random} split of LeanDojo Benchmark 4
 every tactic of each traced Mathlib theorem. Most traced proofs are one to
 four tactics long, too short for an area change or for a
 Chapman--Kolmogorov test at lags of a few steps, so we keep proofs with at
-least 8 steps and sample up to 20{,}000 of them. \todo{number of proofs and
-steps after filtering; share of Mathlib folders covered.} Lean Workbook
+least 8 steps, which leaves \resNumProofs{} proofs with \resNumSteps{} steps.
+\todo{share of Mathlib folders covered.} Lean Workbook
 \citep{ying2024leanworkbook} records at most one tactic per problem, so it
-contributes goal states for judge validation but no transitions. miniF2F and
+contributes no transitions. miniF2F and
 PutnamBench contain statements without proofs and serve only as search
 targets. As a sanity check, a synthetic set with planted areas runs
 through the same pipeline end to end.
@@ -68,7 +68,9 @@ fails.}
 We call the area hypothesis supported if the macrostates reach an NMI of at
 least 0.15 against the judges' consensus labels and beat the Mathlib-folder
 baseline. Both conditions were fixed before any labels were collected.
-\todo{judge agreement ($\kappa$) and accuracy on known codes; NMI and ARI
+\todo{judge agreement ($\kappa$) and accuracy on the gold set (strict:
+\resGoldAccHaiku\% and \resGoldAccSonnet\%; family: \resGoldFamAccHaiku\% and
+\resGoldFamAccSonnet\%; majority class \resGoldMajority\%); NMI and ARI
 for $m = 10$ and the sweep over $m$; next-area prediction against the
 ``stay'' and marginal baselines.}
 

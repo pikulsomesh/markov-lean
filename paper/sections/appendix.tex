@@ -5,10 +5,11 @@
 All settings are in the repository's configuration files:
 \texttt{configs/pilot.yaml} for the data filter and the Markov state model,
 \texttt{configs/judge.yaml} for the judge models and prompt limits, and
-\texttt{configs/search.yaml} for the prover and the search budget. The proof
+\texttt{configs/search.yaml} for the prover, and
+\texttt{configs/search\_eval.yaml} for the search budget and conditions. The proof
 sample, the clustering and the bootstrap use fixed seeds. The
 model was fit on an Apple M2 Mac Mini with 16 GB of memory; the prover ran
-behind vLLM on \todo{instance type}. The judges ran through the Anthropic
+behind vLLM on an AWS g6.xlarge instance. The judges ran through the Anthropic
 Message Batches API with a spending cap of \$20 per submission.
 \todo{commit hash, total judge cost, total GPU hours; a release of the code
 that does not identify the author goes in the supplementary material.}
