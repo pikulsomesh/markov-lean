@@ -52,3 +52,22 @@ The Phase 2 pilot and its gate 1 call; see `src/markov_lean/pilot.py`.
 ## Into the paper — `markov-lean paper`
 
 `markov-lean paper` reads every folder above that exists and writes the paper's figures, tables and headline numbers into `paper/figures/`, keeping the synthetic preview for anything not yet run. See `docs/paper_build.md`.
+
+## Results explorer — `markov-lean explore`
+
+```bash
+markov-lean explore --results results/pilot3 --out site
+```
+
+writes `site/index.html`: one self-contained page (no server, nothing fetched when it opens) for browsing a run and for shipping as supplementary material. It reads whatever of the run exists, so it works before the judges or the full fit have finished:
+
+| input | default | shown as |
+|---|---|---|
+| `msm/` (assignments, `coarse_T.npy`, `msm_report.json`) | `<results>/msm` or `--msm` | macrostate per step, the coarse transition matrix, PCCA+ sets and model checks |
+| goal states and tactics | `<results>/judge/sample_steps.parquet` or `--steps` | each proof's steps |
+| judge labels | `<results>/judge/labels.parquet` or `--labels` | MSC area per step (the judges' consensus, as in `bridges`), steps where they disagree, whole-proof labels |
+| `pilot_report.json` | `<results>/` | gate 1, NMI/ARI and the k sweep |
+
+Views: **Proofs** (search by name or file, or `area:26`, `state:3`, `switch:26>11`, `path:26>11>26`; each proof's area and macrostate strips, step table, and proofs with the same or overlapping switches), **Model** and **Patterns** (area paths with a switch, most common first). On synthetic steps without labels the hidden `true_area` stands in for the judges.
+
+The page holds Lean names, goal states, tactics and model numbers only: no names of people, no machine paths (inputs are shown relative to the results folder), no judge model ids, no timestamps. `--max-proofs` (default 500, about 2.5 MB on pilot-sized proofs; `0` keeps every proof, about 40 MB for 8,400) and `--max-state-chars` (default 600) keep it small; `--seed` picks which proofs stay, preferring ones with goal text and labels.
