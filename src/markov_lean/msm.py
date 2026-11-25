@@ -298,6 +298,32 @@ def bayesian_timescales(dtrajs, lag, n_states, k, n_samples, seed, reversible=Tr
             "upper": np.asarray(stats.R).tolist(), "n_samples": n_samples}
 
 
+def map_microstates(n_micro: int, connected: np.ndarray, assignments: np.ndarray, memberships: np.ndarray,
+                    centers: np.ndarray, disconnected: str = "nearest") -> tuple[np.ndarray, np.ndarray, list[int]]:
+    """Macrostate and membership for every microstate, including ones outside the connected set.
+
+    ``assignments`` and ``memberships`` are PCCA+ outputs indexed like
+    ``connected``.  Dropped microstates get -1 and NaN with ``"drop"``, or the
+    values of the kept microstate with the nearest k-means center with
+    ``"nearest"``.  Returns (macrostate, membership, reassigned microstate ids).
+    """
+    if disconnected not in ("nearest", "drop"):
+        raise ValueError("disconnected must be 'nearest' or 'drop'")
+    connected = np.asarray(connected, dtype=np.int64)
+    dropped = np.setdiff1d(np.arange(n_micro), connected)
+    macro = np.full(n_micro, -1, dtype=np.int64)
+    member = np.full(n_micro, np.nan)
+    macro[connected] = assignments
+    member[connected] = np.asarray(memberships)[np.arange(len(connected)), assignments]
+    if disconnected == "drop" or not len(dropped):
+        return macro, member, []
+    d2 = ((centers[dropped, None, :] - centers[None, connected, :]) ** 2).sum(-1)
+    nearest = connected[np.argmin(d2, axis=1)]
+    macro[dropped] = macro[nearest]
+    member[dropped] = member[nearest]
+    return macro, member, dropped.tolist()
+
+
 def _check(passed, value, threshold, detail) -> dict:
     return {"passed": bool(passed), "value": value, "threshold": threshold, "detail": detail}
 
@@ -364,19 +390,8 @@ def run(steps: pd.DataFrame, config: MSMConfig | None = None) -> MSMResult:
     n_macro = cfg.n_macrostates or pick_n_macrostates(msm, cfg.max_macrostates)
     n_macro = int(min(n_macro, msm.n_states))
     pcca = msm.pcca(n_macro)
-    micro_to_macro = np.full(n_micro, -1, dtype=np.int64)
-    micro_membership = np.full(n_micro, np.nan)
-    micro_to_macro[connected] = pcca.assignments
-    micro_membership[connected] = pcca.memberships[np.arange(len(connected)), pcca.assignments]
-    reassigned: list[int] = []
-    if cfg.disconnected == "nearest" and len(dropped):
-        d2 = ((centers[dropped, None, :] - centers[None, connected, :]) ** 2).sum(-1)
-        nearest = connected[np.argmin(d2, axis=1)]
-        micro_to_macro[dropped] = micro_to_macro[nearest]
-        micro_membership[dropped] = micro_membership[nearest]
-        reassigned = dropped.tolist()
-    elif cfg.disconnected not in ("nearest", "drop"):
-        raise ValueError("disconnected must be 'nearest' or 'drop'")
+    micro_to_macro, micro_membership, reassigned = map_microstates(
+        n_micro, connected, pcca.assignments, pcca.memberships, centers, cfg.disconnected)
     assignments = pd.DataFrame({
         "proof_id": df["proof_id"].astype(str).values,
         "step": df["step"].astype("int64").values,

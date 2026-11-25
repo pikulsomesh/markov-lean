@@ -13,6 +13,7 @@ from markov_lean.msm import (
     MSMConfig,
     choose_lag,
     count_model,
+    map_microstates,
     run,
     sort_steps,
     split_trajectories,
@@ -142,15 +143,39 @@ def test_checks_flag_a_model_without_areas():
     assert {"spectral_gap", "timescales_resolved"} <= set(failed)
 
 
+def test_map_microstates_drop_and_nearest():
+    # microstates 0..3; 2 is outside the connected set and sits next to 3
+    centers = np.array([[0.0, 0.0], [1.0, 0.0], [5.0, 5.1], [5.0, 5.0]])
+    connected = np.array([0, 1, 3])
+    pcca_assign = np.array([0, 0, 1])
+    memberships = np.array([[0.9, 0.1], [0.8, 0.2], [0.3, 0.7]])
+    macro, member, moved = map_microstates(4, connected, pcca_assign, memberships, centers, "drop")
+    assert macro.tolist() == [0, 0, -1, 1] and np.isnan(member[2]) and moved == []
+    macro, member, moved = map_microstates(4, connected, pcca_assign, memberships, centers, "nearest")
+    assert macro.tolist() == [0, 0, 1, 1] and member[2] == pytest.approx(0.7) and moved == [2]
+    with pytest.raises(ValueError):
+        map_microstates(4, connected, pcca_assign, memberships, centers, "other")
+
+
+def test_largest_connected_set_excludes_one_way_states():
+    # state 3 is only ever left, never entered, so it is not strongly connected
+    dtrajs = [np.array([3, 0, 1, 0, 1, 2, 1, 2, 0])]
+    kept = count_model(dtrajs, 1, 4).submodel_largest(directed=True).state_symbols
+    assert sorted(kept.tolist()) == [0, 1, 2]
+
+
 def test_drop_mode_marks_disconnected(synthetic):
     steps, _ = synthetic
     small = steps[steps["proof_id"].isin(steps["proof_id"].unique()[:40])]
     res = run(small, MSMConfig(n_microstates=60, lag=1, n_macrostates=3, disconnected="drop", bayesian_samples=0))
     dropped = res.report["connected_set"]["dropped_microstates"]
-    assert dropped, "expected a sparse microstate outside the connected set"
     a = res.assignments
+    # whether k-means leaves a sparse cluster outside the connected set depends on the
+    # scikit-learn version, so only the invariant is checked here; the mapping itself is
+    # tested deterministically in test_map_microstates_drop_and_nearest
     assert (a.loc[a["microstate"].isin(dropped), "macrostate"] == -1).all()
     assert (a.loc[~a["microstate"].isin(dropped), "macrostate"] >= 0).all()
+    assert res.report["connected_set"]["n_kept"] + len(dropped) == res.report["n_microstates"]
 
 
 def test_save_writes_outputs(result, tmp_path):
