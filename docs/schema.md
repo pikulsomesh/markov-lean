@@ -36,3 +36,24 @@ Every module reads and writes these tables as Parquet. Change a column only in a
 | `microstate` | int | k-means cluster |
 | `macrostate` | int | PCCA+ metastable set |
 | `membership` | float | PCCA+ membership of the assigned macrostate |
+
+## `search_trace` (one row per tactic tried during proof search)
+
+Written by `markov_lean.search` as `trace.parquet` (and `trace.jsonl` while running). The first ten columns are the `steps` columns, so rows with `ok` true can be read as steps; the proofs found are also written on their own as `steps.parquet`.
+
+| column | type | notes |
+|---|---|---|
+| `proof_id` … `true_area` | | as in `steps`; `step` is the depth of the state the tactic ran on, `state_after` is empty when the tactic failed, `true_area` is null |
+| `node_id` | int | search node the tactic was run on (`0` is the theorem's root) |
+| `parent_id` | int or null | that node's parent |
+| `child_id` | int or null | node created for the resulting state; null when it failed, repeated a state or was pruned |
+| `ok` | bool | Lean accepted the tactic |
+| `error` | str or null | Lean's error, `timeout`, `forbidden tactic`, `duplicate state` or `zero prior weight` |
+| `solved` | bool | the tactic closed the proof |
+| `lm_logprob` | float | prover log-probability of the tactic text (duplicates merged by log-sum-exp) |
+| `n_tokens` | int | tokens counted in `lm_logprob` |
+| `count` | int | how many of the `n` samples gave this tactic |
+| `prior_weight` | float or null | weight the prior gave it; null when the prior never saw it |
+| `log_policy` | float or null | log of the normalized prior weight |
+| `path_score` | float or null | cumulative `log_policy` from the root; the search pops the highest first |
+| `elapsed` | float | seconds Lean took on the tactic |
