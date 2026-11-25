@@ -1,0 +1,10 @@
+% Numbers and tables from the runs, written by `markov-lean paper`.
+% figures/results_macros.tex holds the measured numbers once any run is in;
+% until then figures/preview/results_macros.tex defines every one as a red dash.
+\IfFileExists{figures/results_macros.tex}%
+  {\input{figures/results_macros.tex}}%
+  {\input{figures/preview/results_macros.tex}}
+% The tabular body of a results table: figures/<name>.tex once a run fills
+% any cell, else figures/preview/<name>.tex (red dashes only).
+\newcommand{\resultstable}[1]{%
+  \IfFileExists{figures/#1.tex}{\input{figures/#1.tex}}{\input{figures/preview/#1.tex}}}

@@ -23,19 +23,7 @@ through the same pipeline end to end.
   \label{tab:data}
   \centering\small
   \setlength{\tabcolsep}{5pt}
-  \begin{tabular}{lrrl}
-    \toprule
-    Source & Proofs & Steps & Use \\
-    \midrule
-    LeanDojo Benchmark 4 & \tbd & \tbd & transitions \\
-    Lean Workbook        & \tbd & \tbd & judge validation \\
-    Synthetic (planted)  & \tbd & \tbd & sanity check \\
-    \midrule
-    miniF2F (test)       & 244  & --   & search \\
-    ProofNet (test)      & 186  & --   & search \\
-    PutnamBench          & \tbd & --   & search \\
-    \bottomrule
-  \end{tabular}
+  \resultstable{table_data}
 \end{table}
 
 \subsection{Is the model Markovian?}
@@ -71,8 +59,8 @@ fails.}
   \maybefigure{judge_confusion}{0.47\linewidth}\hfill
   \maybefigure{area_flow}{0.47\linewidth}
   \caption{Left: macrostates (rows) against the judges' consensus MSC code
-  (columns), row-normalized; NMI $=$ \todo{x.xx}. Right: the \todo{n}
-  largest flows between areas within proofs, covering \todo{x}\% of
+  (columns), row-normalized; NMI $=$ \resMacroNMI. Right: the \resFlowsShown
+  largest flows between areas within proofs, covering \resFlowCoverage\% of
   area changes.}
   \label{fig:areas}
 \end{figure}
@@ -91,15 +79,5 @@ for $m = 10$ and the sweep over $m$; next-area prediction against the
   its planted areas. \todo{fill from the judge run.}}
   \label{tab:areas}
   \centering\small
-  \begin{tabular}{lcc}
-    \toprule
-    Labeling & NMI & ARI \\
-    \midrule
-    Macrostates ($m = 10$)   & \tbd & \tbd \\
-    Mathlib folder           & \tbd & \tbd \\
-    Random partition         & \tbd & \tbd \\
-    \midrule
-    Synthetic, planted areas & \tbd & \tbd \\
-    \bottomrule
-  \end{tabular}
+  \resultstable{table_areas}
 \end{table}
