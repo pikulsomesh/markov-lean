@@ -59,10 +59,17 @@ def _search_report(rest: list[str]) -> int:
     return search_report.main(rest)
 
 
+def _significance(rest: list[str]) -> int:
+    from markov_lean import significance
+
+    return significance.main(rest)
+
+
 # Commands that parse their own options.
 PASSTHROUGH = {
     "search-eval": (_search_eval, "proof search on miniF2F/PutnamBench under prior conditions (EC2)"),
     "search-report": (_search_report, "pass@k tables, paired tests and figures from search-eval runs"),
+    "significance": (_significance, "proof-level significance tests for gate 1 on a finished pilot run"),
 }
 
 
