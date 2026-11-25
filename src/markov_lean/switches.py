@@ -633,22 +633,29 @@ def table_tex(results: dict[str, dict]) -> str:
     for i, (src, r) in enumerate(results.items()):
         if i:
             lines.append(r"  \midrule")
-        a = _overall(r)["statistics"]
-        for j, s in enumerate(STATS):
-            v = a[s]
-            cells = [SOURCE_LABELS.get(src, src) if j == 0 else "", STAT_LABELS[s],
-                     f"{_f(v['observed'])} [{_f(v['ci95'][0])}, {_f(v['ci95'][1])}]"]
-            for n in nulls:
-                d = v["nulls"].get(n)
-                if d is None:
-                    cells.append("--")
-                elif d["fixed_by_null"]:
-                    cells.append("(fixed)")
-                else:
-                    cells.append(f"{_f(d['null_mean'])} ({_tex_p(d['p_two_sided'])})")
-            lines.append("  " + " & ".join(cells) + r" \\")
+        lines += table_rows(src, r, nulls)
     lines += [r"  \bottomrule", r"\end{tabular}"]
     return "\n".join(lines) + "\n"
+
+
+def table_rows(src: str, r: dict, nulls=NULLS) -> list[str]:
+    """One source's rows of ``table_tex``, one per statistic, with a column per null in ``nulls``."""
+    a = _overall(r)["statistics"]
+    out = []
+    for j, s in enumerate(STATS):
+        v = a[s]
+        cells = [SOURCE_LABELS.get(src, src) if j == 0 else "", STAT_LABELS[s],
+                 f"{_f(v['observed'])} [{_f(v['ci95'][0])}, {_f(v['ci95'][1])}]"]
+        for n in nulls:
+            d = v["nulls"].get(n)
+            if d is None:
+                cells.append("--")
+            elif d["fixed_by_null"]:
+                cells.append("(fixed)")
+            else:
+                cells.append(f"{_f(d['null_mean'])} ({_tex_p(d['p_two_sided'])})")
+        out.append("  " + " & ".join(cells) + r" \\")
+    return out
 
 
 def markdown(rep: dict, results: dict[str, dict]) -> str:
@@ -715,6 +722,7 @@ def draw(results: dict[str, dict], dwell: pd.DataFrame):
         axes = top.subplots(1, len(STATS))
         srcs = list(results)
         pal = dict(zip(["observed", *NULLS], sns.color_palette(n_colors=1 + len(NULLS))))
+        seen: set[str] = set()  # label each series once, at its first appearance (macrostates have no noise null)
         for ax, st in zip(axes, STATS):
             for i, src in enumerate(srcs):
                 v = _overall(results[src])["statistics"][st]
@@ -724,8 +732,11 @@ def draw(results: dict[str, dict], dwell: pd.DataFrame):
                 for k, n in enumerate(results[src]["nulls"]):
                     d = v["nulls"][n]
                     ax.plot([i + 0.12 * (k + 1)], [d["null_mean"]], marker="_", ms=10, mew=2, color=pal[n],
-                            ls="none", label=NULL_LABELS[n] if i == 0 else None)
-            ax.set_xticks(range(len(srcs)), [SOURCE_LABELS.get(s, s) for s in srcs], rotation=0)
+                            ls="none", label=NULL_LABELS[n] if n not in seen else None)
+                    seen.add(n)
+            # one word per line, so two or three sources fit under a quarter-width panel
+            ax.set_xticks(range(len(srcs)), [SOURCE_LABELS.get(s, s).replace(" ", "\n") for s in srcs], rotation=0,
+                          fontsize="small")
             ax.set_xlim(-0.4, len(srcs) - 0.2)
             ax.set_title(STAT_LABELS[st], fontsize="medium")
             sns.despine(ax=ax)
@@ -762,6 +773,10 @@ def draw(results: dict[str, dict], dwell: pd.DataFrame):
                                  "rate": v["nulls"]["shuffle"]["null_mean"]})
         if rows:
             df = pd.DataFrame(rows)
+            order = list(length_bin(np.asarray(LENGTH_EDGES)))  # 2-3, 4-7, ... whichever source comes first
+            df["length"] = pd.Categorical(df["length"], categories=[o for o in order if o in set(df["length"])],
+                                          ordered=True)
+            df = df.sort_values("length", kind="stable")
             sns.lineplot(data=df, x="length", y="rate", hue="source", style="series", marker="o", ms=3, ax=ax,
                          sort=False)
             ax.legend(fontsize="x-small", frameon=False)

@@ -19,12 +19,13 @@ Inputs (each optional; a ``--<name>`` flag picks a folder instead of the search)
 | significance | ``markov-lean significance`` | ``<pilot>/significance`` or ``<results>/significance`` |
 | bridges | ``markov-lean bridges`` | ``<results>/bridges`` or ``<pilot>/bridges`` |
 | switches | ``markov-lean switches`` | ``<pilot>/switches``, ``<results>/switches`` or ``<full>/switches`` |
+| premise | ``markov-lean premise-labels`` | ``<results>/premise-switches/proofs_8plus/switches/train``, else ``.../all_proofs/switches/train`` |
 | accuracy | ``markov-lean judge-accuracy --out`` | ``<pilot>/judge_accuracy`` or ``<results>/judge_accuracy`` |
 
 Outputs in ``<paper>/figures/`` (what ``\\maybefigure`` and ``\\resultstable`` read):
 
 * ``<name>.pdf`` for each paper figure that has real inputs;
-* ``switches.pdf``, copied from the switches run;
+* ``switches.pdf``, copied from the switches run, or redrawn with the premise rows when there is a premise run;
 * ``table_data.tex``, ``table_areas.tex``, ``table_search.tex``, ``table_switches.tex``: the tables'
   ``tabular`` bodies, with a red dash (``\\tbd``) in every cell still waiting on a run;
 * ``results_macros.tex``: ``\\newcommand`` for every headline number the text
@@ -65,7 +66,7 @@ FIGURES = ["implied_timescales", "transition_matrix", "chapman_kolmogorov", "jud
            "search_ablation", "switches"]
 TABLES = ["table_data", "table_areas", "table_search", "table_switches"]
 INPUTS = ("pilot", "synthetic", "full", "msm", "search", "robustness", "significance", "bridges", "switches",
-          "accuracy")
+          "premise", "accuracy")
 
 # Search conditions of configs/search_eval.yaml: row label in the table, short label in the figure.
 CONDITION_LABELS = {
@@ -127,8 +128,9 @@ for _b, _m in BENCHMARK_MACROS.items():
     MACROS[f"resSearchArea{_m}"] = f"{_b}: problems solved (%) with the area prior"
     MACROS[f"resSearchGain{_m}"] = f"{_b}: change in problems solved, area prior minus LM prior, in points"
 
-# `markov-lean switches`: area source in switches.json -> macro infix.
-SWITCH_SOURCES = {"judge": "Judge", "macrostate": "Macro"}
+# `markov-lean switches`: area source in switches.json -> macro infix.  Judge and macrostate rows come from the
+# switches run; premise rows (`markov-lean premise-labels`, source `premise`) from the premise run.
+SWITCH_SOURCES = {"judge": "Judge", "macrostate": "Macro", "premise": "Premise"}
 # (macro suffix, headline key, format, what it is).  Formats: int, pct (percent, 1 decimal), num<d>, p.
 SWITCH_MACROS = [
     ("Proofs", "n_proofs", "int", "proofs with at least two area-labelled steps"),
@@ -150,6 +152,8 @@ SWITCH_MACROS = [
 for _s, _i in SWITCH_SOURCES.items():
     for _suffix, _key, _fmt, _what in SWITCH_MACROS:
         MACROS[f"resSwitch{_i}{_suffix}"] = f"switches, {_s}: {_what}"
+MACROS["resSwitchPremiseCoverage"] = "share of all LeanDojo steps that get a premise-folder area label, in percent"
+MACROS["resSwitchPremiseMinSteps"] = "premise rows: only proofs with at least this many tactic steps are tested"
 
 # `markov-lean judge-accuracy`: a word in the judge's name -> macro infix.
 GOLD_JUDGES = {"haiku": "Haiku", "sonnet": "Sonnet"}
@@ -188,6 +192,7 @@ class Sources:
     significance: Path | None = None
     bridges: Path | None = None
     switches: Path | None = None
+    premise: Path | None = None
     accuracy: Path | None = None
 
     def describe(self) -> list[str]:
@@ -285,6 +290,11 @@ def discover(results: str | Path, **override: str | Path | None) -> Sources:
         cands = ([src.pilot / "switches"] if src.pilot else []) + [results / "switches"] + \
             ([src.full / "switches"] if src.full else [])
         src.switches = next((c for c in cands if (c / "switches.json").exists()), None)
+    if src.premise is None:  # the long-proof subset first: short proofs sit at the label-noise floor
+        base = results / "premise-switches"
+        cands = [base / "proofs_8plus" / "switches" / "train", base / "all_proofs" / "switches" / "train",
+                 base / "switches" / "train", base]
+        src.premise = next((c for c in cands if (c / "switches.json").exists()), None)
     if src.accuracy is None:
         cands = ([src.pilot / "judge_accuracy"] if src.pilot else []) + [results / "judge_accuracy"]
         src.accuracy = next((c for c in cands if (c / "judge_accuracy.json").exists()), None)
@@ -514,26 +524,43 @@ def table_search_tex(table: pd.DataFrame) -> str:
 
 
 def table_switches_preview_tex() -> str:
-    """The layout of ``markov-lean switches``' table, judge areas and macrostates, every number a red dash."""
+    """The layout of the switching table, judge areas, macrostates and premise folders, every number a red dash."""
+    return table_switches_tex([(s, None) for s in SWITCH_SOURCES])
+
+
+def _switch_preview_rows(src: str) -> list[str]:
     from . import switches as S
 
-    lines = ["% Preview of `markov-lean switches`' table: every number waits on a run.",
+    out = []
+    for j, st in enumerate(S.STATS):
+        cells = [S.SOURCE_LABELS.get(src, src) if j == 0 else "", S.STAT_LABELS[st], r"\tbd{} [\tbd, \tbd]"]
+        for n in S.NULLS:
+            if n == "shuffle" and st in ("has_switch", "off_mode"):
+                cells.append("(fixed)")
+            elif n == "noise" and src == "macrostate":  # no labeller error rate for macrostates
+                cells.append("--")
+            else:
+                cells.append(r"\tbd{} (\tbd)")
+        out.append("  " + " & ".join(cells) + r" \\")
+    return out
+
+
+def table_switches_tex(rows: list[tuple[str, dict | None]]) -> str:
+    """The switching table: one block per (source, ``switches`` result); a ``None`` result is a block of red dashes.
+
+    Every null gets a column, so the layout is the same whichever sources have run.
+    """
+    from . import switches as S
+
+    lines = ["% Within-proof area switching: observed [95% bootstrap CI over proofs] and each null's mean",
+             "% (two-sided permutation p in parentheses); red dashes wait on a run.",
              r"\begin{tabular}{ll" + "c" * (1 + len(S.NULLS)) + "}", r"  \toprule",
              "  Areas & Statistic & Observed & " + " & ".join(S.NULL_LABELS[n] for n in S.NULLS) + r" \\",
              r"  \midrule"]
-    for i, src in enumerate(SWITCH_SOURCES):
+    for i, (src, r) in enumerate(rows):
         if i:
             lines.append(r"  \midrule")
-        for j, st in enumerate(S.STATS):
-            cells = [S.SOURCE_LABELS[src] if j == 0 else "", S.STAT_LABELS[st], r"\tbd{} [\tbd, \tbd]"]
-            for n in S.NULLS:
-                if n == "shuffle" and st in ("has_switch", "off_mode"):
-                    cells.append("(fixed)")
-                elif n == "noise" and src != "judge":  # no labeller error rate for macrostates
-                    cells.append("--")
-                else:
-                    cells.append(r"\tbd{} (\tbd)")
-            lines.append("  " + " & ".join(cells) + r" \\")
+        lines += _switch_preview_rows(src) if r is None else S.table_rows(src, r, S.NULLS)
     lines += [r"  \bottomrule", r"\end{tabular}"]
     return "\n".join(lines) + "\n"
 
@@ -826,37 +853,124 @@ def _build_bridges(src: Sources, b: Build) -> None:
         b.copies["bridges.pdf"] = (p, _rel(p, src.results.parent))
 
 
+def _switch_run(folder: Path | None) -> dict | None:
+    """A ``markov-lean switches`` (or ``premise-labels``) output folder: its report, files and source label."""
+    if folder is None or not (folder / "switches.json").exists():
+        return None
+    return {"dir": folder, "rep": _read_json(folder / "switches.json")}
+
+
+def _premise_coverage(folder: Path) -> float | None:
+    """Share of all steps with a ``premise`` label, from the ``coverage.json`` that ``premise-labels`` writes."""
+    for d in (folder, *list(folder.parents)[:3]):
+        if (d / "coverage.json").exists():
+            for e in _read_json(d / "coverage.json").get("by_split") or []:
+                if e.get("split") == "all" and e.get("source") == "premise":
+                    return e.get("share_labelled")
+            return None
+    return None
+
+
+def _premise_min_steps(run: dict):
+    """The tactic-step cut of a premise run: ``inputs`` in newer runs, else a ``proofs_<k>plus`` folder name."""
+    v = (run["rep"].get("inputs") or {}).get("min_switch_steps")
+    if _finite(v):
+        return int(v)
+    for part in reversed(run["dir"].resolve().parts):
+        m = re.fullmatch(r"proofs_(\d+)plus", part)
+        if m:
+            return int(m.group(1))
+        if part == "all_proofs":
+            return 1
+    return None
+
+
+def _dwell(run: dict, sources: list[str]) -> pd.DataFrame | None:
+    p = run["dir"] / "dwell.csv"
+    if not p.exists():
+        return None
+    d = pd.read_csv(p)
+    return d[d["source"].isin(sources)]
+
+
 def _build_switches(src: Sources, b: Build) -> None:
-    """Table, figure and headline numbers of ``markov-lean switches``."""
-    if src.switches is None or not (src.switches / "switches.json").exists():
+    """Table, figure and headline numbers of ``markov-lean switches``, plus the premise rows of ``premise-labels``.
+
+    Judge and macrostate rows come from the switches run and the ``premise`` rows from the premise run; a source
+    with no run stays a block of red dashes, so the table always has the same rows.
+    """
+    main, prem = _switch_run(src.switches), _switch_run(src.premise)
+    if main is None and prem is None:
         return
-    path = src.switches / "switches.json"
-    rel = _rel(src.switches, src.results.parent)
-    rep = _read_json(path)
-    head = rep.get("headline") or {}
+    base = src.results.parent
+    for r in (main, prem):
+        if r is not None:
+            r["rel"] = _rel(r["dir"], base)
+            r["results"] = r["rep"].get("sources") or {}
+    if prem is not None and "premise" not in (prem["rep"].get("headline") or {}):
+        b.failures["premise"] = f"{prem['rel']}/switches.json has no `premise` source"
+        prem = None
+
+    # numbers: each source from its own run (a premise source in the switches run is used only without a premise run)
+    heads: dict[str, tuple[dict, str]] = {}
+    if main is not None:
+        for s, h in (main["rep"].get("headline") or {}).items():
+            heads[s] = (h, main["rel"])
+    if prem is not None:
+        heads["premise"] = (prem["rep"]["headline"]["premise"], prem["rel"])
+        cov = _premise_coverage(prem["dir"])
+        if _finite(cov):
+            b.macros["resSwitchPremiseCoverage"] = (switch_macro_value(cov, "pct"), prem["rel"])
+        k = _premise_min_steps(prem)
+        if k is not None:
+            b.macros["resSwitchPremiseMinSteps"] = (tex_int(k), prem["rel"])
     for s, infix in SWITCH_SOURCES.items():
-        h = head.get(s)
-        if not h:
+        if s not in heads:
             continue
+        h, rel = heads[s]
         for suffix, key, fmt, _ in SWITCH_MACROS:
             v = _headline_value(h, key)
             if _finite(v):
                 b.macros[f"resSwitch{infix}{suffix}"] = (switch_macro_value(v, fmt), rel)
-    shown = [s for s in head if s in SWITCH_SOURCES]
-    tex_p = src.switches / "table_switches.tex"
-    if tex_p.exists():
-        tex = tex_p.read_text()
-    elif rep.get("sources"):  # rebuild it from the json when only that was kept
+
+    # table
+    real: dict[str, dict] = dict(main["results"]) if main is not None else {}
+    if prem is not None and "premise" in prem["results"]:
+        real["premise"] = prem["results"]["premise"]
+    rels = ", ".join(r["rel"] for r in (main, prem) if r is not None)
+    if main is not None and not main["results"] and (main["dir"] / "table_switches.tex").exists():
+        # an older run kept only its table: copy it as it is (premise rows cannot be added to it)
+        b.tables["table_switches"] = ((main["dir"] / "table_switches.tex").read_text(), main["rel"], True)
+    else:
+        rows: list[tuple[str, dict | None]] = []
+        for s in SWITCH_SOURCES:
+            if s in real:
+                rows.append((s, real[s]))
+            elif s == "judge" and "true_area" in real:  # synthetic runs: planted areas in the judge's place
+                rows.append(("true_area", real["true_area"]))
+            else:
+                rows.append((s, None))
+        rows += [(s, r) for s, r in real.items() if s not in {x for x, _ in rows}]
+        if any(r is not None for _, r in rows):
+            b.tables["table_switches"] = (table_switches_tex(rows), rels, True)
+
+    # figure: redrawn when there are premise rows to add, else the switches run's own figure
+    shown = [s for s in (main["rep"].get("headline") or {}) if s in SWITCH_SOURCES] if main is not None else []
+    main_fig = main["dir"] / "switches.pdf" if main is not None else None
+    if prem is not None and "premise" in prem["results"]:
         from . import switches as S
 
-        tex = S.table_tex(rep["sources"])
-    else:
-        tex = ""
-    if tex:
-        b.tables["table_switches"] = (tex, rel, True)
-    fig = src.switches / "switches.pdf"
-    if fig.exists():
-        b.figure_files["switches"] = (fig, rel, ", ".join(shown) if shown else "")
+        srcs = [s for s in ("judge", "true_area", "macrostate") if main is not None and s in main["results"]]
+        dws = [_dwell(prem, ["premise"])] + ([_dwell(main, srcs)] if srcs else [])
+        # an older switches run with a figure but no results cannot be redrawn: keep its own figure then
+        legacy = main is not None and not main["results"] and main_fig.exists()
+        if not legacy and all(d is not None for d in dws):
+            res = {s: main["results"][s] for s in srcs}
+            res["premise"] = prem["results"]["premise"]
+            b.figures["switches"] = (S.draw(res, pd.concat(dws, ignore_index=True)), rels, ", ".join(res))
+            return
+    if main_fig is not None and main_fig.exists():
+        b.figure_files["switches"] = (main_fig, main["rel"], ", ".join(shown) if shown else "")
 
 
 def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, baseline: str,

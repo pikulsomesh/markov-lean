@@ -469,8 +469,12 @@ def judge_agreement(lab: pd.DataFrame, labels_path: str | Path | None) -> dict:
 
 def run_switches(lab: pd.DataFrame, steps: pd.DataFrame, out: Path, *, sources: Iterable[str] = SOURCES,
                  nulls: list[str] | None = None, n_perm: int = 1000, n_boot: int = 2000, seed: int = 0,
-                 min_proofs: int = 30, figures: bool = True, verbose: bool = True, title: str = "") -> dict:
-    """``markov-lean switches`` on the premise sources of ``lab``; writes the same files as that command."""
+                 min_proofs: int = 30, figures: bool = True, verbose: bool = True, title: str = "",
+                 inputs: dict | None = None) -> dict:
+    """``markov-lean switches`` on the premise sources of ``lab``; writes the same files as that command.
+
+    ``inputs`` (the split and the tactic-step cut, say) is kept in ``switches.json`` for ``markov-lean paper``.
+    """
     say = print if verbose else (lambda *a, **k: None)
     nulls = list(nulls or sw.NULLS)
     stp = steps.assign(proof_id=steps["proof_id"].astype(str))
@@ -492,7 +496,7 @@ def run_switches(lab: pd.DataFrame, steps: pd.DataFrame, out: Path, *, sources: 
     even = {s: {st: break_even(sweep[sweep["source"] == s], st) for st in ("off_mode", "has_switch")}
             for s in results} if len(sweep) else {}
     report = {
-        "run": title or str(out), "inputs": {}, "notes": {s: SOURCE_NOTES[s] for s in results},
+        "run": title or str(out), "inputs": dict(inputs or {}), "notes": {s: SOURCE_NOTES[s] for s in results},
         "noise_break_even": even,
         "noise_rate_source": eps_note,
         "settings": {"n_perm": n_perm, "n_boot": n_boot, "seed": seed, "nulls": nulls, "markov_group": "folder",
@@ -676,7 +680,8 @@ def run(steps_paths: list[str | Path], out: str | Path, *, index_paths: list[str
             stp = steps[steps["split"].astype(str) == split] if split != "all" else steps
             reports[split] = run_switches(g, stp, out / "switches" / split, nulls=nulls, n_perm=n_perm,
                                           n_boot=n_boot, seed=seed, min_proofs=min_proofs, figures=figures,
-                                          verbose=verbose, title=f"premise labels, {split}")
+                                          verbose=verbose, title=f"premise labels, {split}",
+                                          inputs={"split": split, "min_switch_steps": min_switch_steps})
     say(f"wrote {out}")
     return {"coverage": cov, "agreement": agree, "switches": {k: v["headline"] for k, v in reports.items()}}
 
