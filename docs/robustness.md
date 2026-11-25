@@ -34,5 +34,6 @@ The sweep refits the model for every cell; its cell at the pilot's own setting r
 
 - Bootstrap intervals resample proofs, not steps, because steps of one proof are correlated. Duplicated proofs push plug-in NMI up for groupings with many small groups, so each interval is the bootstrap spread placed around the full-data estimate; `nmi_bootstrap_bias` reports the shift.
 - The gate is called at the configured k = 10. The sweep over k is reported next to it, not used to pick k.
-- The default grid (4 featurizers × 4 microstate counts × lags 1, 2, 3, 5 × k 2–20) is 1,216 settings. `--quick` runs 2 × 2 × 3 × 8.
+- The default grid (4 featurizers × 4 microstate counts × lags 1, 2, 3, 5 × k = 2–12, 14, 16, 18, 20) is 960 settings. `--quick` runs 2 × 2 × 3 × 8 = 96.
 - `--jobs` runs sweep cells in separate processes, one BLAS thread each. On the 16 GB Mac Mini, 6 jobs leave headroom.
+- Run time is set by PCCA+, which is slow at large k (about 80 s per model at k = 20, 7 s at k = 12) and runs once per featurizer × microstates × lag × k. On 100k synthetic steps with 4 jobs, `--quick` took about 14 minutes and the full grid 51 minutes. Start with `--quick`, then run the full grid when the machine is free.
