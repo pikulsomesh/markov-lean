@@ -76,11 +76,18 @@ def test_color_for_folds_past_eight():
 @pytest.fixture
 def plt():
     mpl = pytest.importorskip("matplotlib")
+    pytest.importorskip("seaborn")
     mpl.use("Agg", force=True)
     import matplotlib.pyplot as plt
 
     yield plt
     plt.close("all")
+
+
+def _bars(ax):
+    from matplotlib.container import BarContainer
+
+    return [b for c in ax.containers if isinstance(c, BarContainer) for b in c if np.isfinite(b.get_height())]
 
 
 def _msm(m=3, seed=0):
@@ -95,7 +102,8 @@ def test_implied_timescales(plt, tmp_path):
     fig = figures.implied_timescales(lags, ts, lower=ts * 0.9, upper=ts * 1.1)
     ax = fig.axes[0]
     assert ax.get_yscale() == "log"
-    assert len(ax.get_lines()) == 3  # two timescales + the tau = t line
+    drawn = [ln for ln in ax.get_lines() if len(ln.get_xdata())]  # seaborn adds empty legend proxies
+    assert len(drawn) == 3  # two timescales + the tau = t line
     path = figures.save_pdf(fig, tmp_path / "its.pdf")
     assert path.read_bytes()[:4] == b"%PDF"
 
@@ -142,8 +150,10 @@ def test_judge_cluster_confusion_reports_nmi(plt, tmp_path):
     msc[:40] = "03"  # some noise
     fig = figures.judge_cluster_confusion(clusters, msc)
     assert fig.nmi == pytest.approx(figures.nmi(clusters, msc))
-    assert f"NMI = {fig.nmi:.2f}" in fig.axes[0].get_title(loc="left")
+    assert fig.axes[0].get_title(loc="left") == ""  # ICML: no titles inside figures
     figures.save_pdf(fig, tmp_path / "conf.pdf")
+    shown = figures.judge_cluster_confusion(clusters, msc, show_nmi=True)
+    assert f"NMI = {fig.nmi:.2f}" in shown.axes[0].get_title(loc="left")
 
 
 def test_judge_cluster_confusion_drops_missing_and_validates(plt):
@@ -166,7 +176,12 @@ def test_area_flow(plt, tmp_path):
     names = {0: "algebra", 1: "analysis", 2: "number theory", 3: "combinatorics"}
     fig = figures.area_flow(flows, top=5, area_names=names)
     ax = fig.axes[0]
-    assert ax.get_title(loc="left").startswith("top 5 flows")
+    assert ax.get_title(loc="left") == ""
+    assert fig.flows_shown == 5
+    assert fig.moves_shown == int(flows.head(5)["count"].sum())
+    assert fig.moves_total == int(flows["count"].sum())
+    titled = figures.area_flow(flows, top=5, area_names=names, show_summary=True)
+    assert titled.axes[0].get_title(loc="left").startswith("top 5 flows")
     labels = {t.get_text() for t in ax.texts}
     shown = set(flows.head(5).from_area) | set(flows.head(5).to_area)
     assert {names[a] for a in shown} <= labels
@@ -187,12 +202,59 @@ def test_search_ablation(plt, tmp_path):
     })
     fig = figures.search_ablation(res, group_col="benchmark", err_col="se")
     ax = fig.axes[0]
-    assert len(ax.patches) == 4
+    assert len(_bars(ax)) == 4
+    assert len([c for c in ax.containers if type(c).__name__ == "ErrorbarContainer"]) == 4
     assert [t.get_text() for t in ax.get_xticklabels()] == ["miniF2F", "ProofNet"]
     figures.save_pdf(fig, tmp_path / "ablation.pdf")
 
 
-def test_search_ablation_duplicate_rows(plt):
-    res = pd.DataFrame({"method": ["a", "a"], "solved": [1.0, 2.0]})
+def test_search_ablation_err_col_needs_one_row_per_bar(plt):
+    res = pd.DataFrame({"method": ["a", "a"], "solved": [1.0, 2.0], "se": [0.1, 0.1]})
     with pytest.raises(ValueError):
-        figures.search_ablation(res)
+        figures.search_ablation(res, err_col="se")
+
+
+def test_search_ablation_aggregates_seeds(plt):
+    res = pd.DataFrame({
+        "method": ["baseline"] * 3 + ["area prior"] * 3,
+        "seed": [0, 1, 2] * 2,
+        "solved": [40.0, 42.0, 41.0, 44.0, 46.0, 45.0],
+    })
+    fig = figures.search_ablation(res, errorbar="sd")
+    ax = fig.axes[0]
+    heights = sorted(b.get_height() for b in _bars(ax))
+    assert heights == pytest.approx([41.0, 45.0])
+    assert ax.get_legend() is not None
+
+
+def test_search_ablation_err_col_with_missing_bar(plt):
+    res = pd.DataFrame({
+        "benchmark": ["miniF2F", "miniF2F", "ProofNet"],
+        "method": ["baseline", "area prior", "baseline"],
+        "solved": [40.0, 44.5, 15.0],
+        "se": [1.0, 1.2, 0.8],
+    })
+    fig = figures.search_ablation(res, group_col="benchmark", err_col="se")
+    assert len(_bars(fig.axes[0])) == 3
+
+
+# ------------------------------------------------ style
+def test_style_is_sans_serif_and_does_not_leak(plt):
+    import matplotlib
+
+    before = dict(matplotlib.rcParams)
+    fig = figures.transition_heatmap(_msm())
+    assert dict(matplotlib.rcParams) == before
+    ax = fig.axes[0]
+    family = ax.xaxis.label.get_fontfamily()
+    assert family == ["sans-serif"]
+    rc = figures.paper_rc()
+    assert rc["font.sans-serif"][0] == "Arial"
+    assert rc["axes.spines.top"] is False
+
+
+def test_pdf_embeds_truetype_not_type3(plt, tmp_path):
+    fig = figures.implied_timescales([1, 2, 4], np.array([[10.0], [11.0], [11.5]]))
+    data = figures.save_pdf(fig, tmp_path / "its.pdf").read_bytes()
+    assert b"/Type3" not in data
+    assert b"/FontFile2" in data

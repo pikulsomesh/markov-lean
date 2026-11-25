@@ -1,6 +1,7 @@
 % markov-lean paper. Target: ICML 2027 (abstracts Jan 14, full papers Jan 22, 2027).
-% Builds with the official ICML style when icml2027.sty / icml2027.bst sit in
-% this folder, and falls back to the article class otherwise (see README.md).
+% Follows the official ICML 2027 example_paper.tex. The style files from the
+% author kit live in this folder; without them the paper falls back to the
+% article class (see README.md).
 \documentclass{article}
 
 \newif\ificmlstyle
@@ -11,10 +12,16 @@
 \usepackage{booktabs}
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{xcolor}
+% The ICML template loads hyperref before the style. For a build without
+% hyperref, drop this line and use \usepackage[nohyperref]{icml2027} below.
 \usepackage{hyperref}
 
 \ificmlstyle
-  % Submission (anonymous) by default. Use [accepted] for the camera-ready.
+  % Needed by the template's algorithm package when hyperref is loaded.
+  \newcommand{\theHalgorithm}{\arabic{algorithm}}
+  % Anonymous submission by default.
+  %   [preprint]  non-anonymous arXiv version (no "under review" notice)
+  %   [accepted]  camera-ready, after acceptance
   \usepackage{icml2027}
 \else
   \usepackage[margin=1in]{geometry}
@@ -62,6 +69,9 @@
 \input{sections/search}
 \input{sections/discussion}
 
+% Unnumbered statements the ICML 2027 instructions require before the references.
+\input{sections/statements}
+
 \bibliography{refs}
 \ificmlstyle
   \bibliographystyle{icml2027}
@@ -69,8 +79,10 @@
   \bibliographystyle{plainnat}
 \fi
 
-\clearpage
+\newpage
 \appendix
+% The template sets the appendix in one column; drop \onecolumn to keep two.
+\ificmlstyle\onecolumn\fi
 \input{sections/appendix}
 
 \end{document}

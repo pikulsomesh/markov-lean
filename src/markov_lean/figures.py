@@ -4,16 +4,29 @@ Every public plotting function takes arrays or DataFrames, draws on a new
 Figure (or on an ``ax`` you pass), and returns the Figure. Nothing here reads
 files or runs the pipeline; call :func:`save_pdf` to write a figure.
 
-The palette is the validated default categorical order (light mode, since the
-paper prints on white) and a one-hue blue ramp for magnitudes. Colors follow
-the entity: macrostate ``i`` always gets slot ``i`` so a figure that drops a
-state does not repaint the rest.
+Style: seaborn's ``ticks`` look at ``paper`` scale with a sans-serif font
+(Arial, falling back to Helvetica, Liberation Sans and DejaVu Sans where Arial
+is not installed). Every figure is drawn inside :func:`paper_rc`, so importing
+this module changes no global matplotlib settings; call :func:`use_paper_style`
+to apply the same look to your own plots. PDFs embed TrueType fonts, never
+Type 3, which the ICML instructions warn against. Default sizes fit the ICML
+column (3.25 in) unless a figure needs the full text width (6.75 in). The ICML
+instructions put captions under figures and no titles inside the graphic, so
+no figure draws a title by default; figures that compute a headline number
+(NMI, the share of moves a flow plot covers) attach it to the Figure for the
+caption instead.
 
-matplotlib is an optional dependency (the ``figures`` extra), so it is imported
-lazily inside each function.
+Color: the validated default categorical order (light mode, since the paper
+prints on white) and a one-hue blue ramp for magnitudes. Colors follow the
+entity: macrostate ``i`` always gets slot ``i`` so a figure that drops a state
+does not repaint the rest.
+
+matplotlib and seaborn are optional dependencies (the ``figures`` extra), so
+they are imported lazily.
 """
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -37,10 +50,20 @@ TEXT_SECONDARY = "#666666"
 GRID = "#e5e5e5"
 # One-hue blue ramp, light to dark, for heatmaps.
 BLUE_RAMP = ("#f4f8fe", "#cce3fd", "#9dc8f7", "#6aabf1", "#338ced", "#2370cd", "#1757ac", "#0e3d7e")
+# Arial first; the rest are metric-compatible or close stand-ins for machines without it.
+SANS_SERIF = ("Arial", "Helvetica", "Liberation Sans", "Nimbus Sans", "DejaVu Sans")
+# ICML 2027 two-column layout, inches.
+COLUMN_WIDTH = 3.25
+TEXT_WIDTH = 6.75
 
 __all__ = [
     "CATEGORICAL",
+    "COLUMN_WIDTH",
+    "TEXT_WIDTH",
+    "SANS_SERIF",
     "color_for",
+    "paper_rc",
+    "use_paper_style",
     "nmi",
     "area_transitions",
     "implied_timescales",
@@ -50,10 +73,11 @@ __all__ = [
     "area_flow",
     "search_ablation",
     "save_pdf",
+    "save_all",
 ]
 
 
-# ---------------------------------------------------------------- helpers
+# ---------------------------------------------------------------- style
 def _plt():
     import matplotlib
 
@@ -62,21 +86,69 @@ def _plt():
     return matplotlib, plt
 
 
+def _sns():
+    import seaborn as sns
+
+    return sns
+
+
 def color_for(i: int) -> str:
     """Categorical color for entity ``i``; past the eighth slot everything is "Other" gray."""
     return CATEGORICAL[i] if 0 <= i < len(CATEGORICAL) else OTHER
 
 
-def _style(ax) -> None:
-    for side in ("top", "right"):
-        ax.spines[side].set_visible(False)
-    for side in ("left", "bottom"):
-        ax.spines[side].set_color(TEXT_SECONDARY)
-        ax.spines[side].set_linewidth(0.8)
-    ax.tick_params(colors=TEXT_SECONDARY, labelcolor=TEXT, labelsize=8)
-    ax.xaxis.label.set_color(TEXT)
-    ax.yaxis.label.set_color(TEXT)
-    ax.title.set_color(TEXT)
+def paper_rc(font_scale: float = 0.9) -> dict:
+    """matplotlib rc settings for the paper: seaborn ``ticks`` + ``paper`` context, sans-serif.
+
+    ``font_scale`` 0.9 puts tick labels near 7 pt and axis labels near 8.5 pt,
+    a little under the 9 pt ICML caption size.
+    """
+    from cycler import cycler
+
+    sns = _sns()
+    rc: dict = {}
+    rc.update(sns.axes_style("ticks"))
+    rc.update(sns.plotting_context("paper", font_scale=font_scale))
+    rc.update({
+        "font.family": "sans-serif",
+        "font.sans-serif": list(SANS_SERIF),
+        "mathtext.fontset": "dejavusans",
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+        "axes.prop_cycle": cycler(color=list(CATEGORICAL)),
+        "axes.edgecolor": TEXT_SECONDARY,
+        "axes.labelcolor": TEXT,
+        "axes.titlecolor": TEXT,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "text.color": TEXT,
+        "xtick.color": TEXT_SECONDARY,
+        "ytick.color": TEXT_SECONDARY,
+        "xtick.labelcolor": TEXT,
+        "ytick.labelcolor": TEXT,
+        "grid.color": GRID,
+        "grid.linewidth": 0.6,
+        "legend.frameon": False,
+        "savefig.dpi": 300,
+    })
+    return rc
+
+
+def use_paper_style(font_scale: float = 0.9) -> None:
+    """Apply :func:`paper_rc` globally (for notebooks and one-off plots)."""
+    _plt()[0].rcParams.update(paper_rc(font_scale))
+
+
+def _themed(fn):
+    """Draw ``fn``'s figure inside the paper style without touching global rcParams."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        matplotlib, _ = _plt()
+        with matplotlib.rc_context(paper_rc()):
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def _new_ax(ax, figsize):
@@ -93,11 +165,11 @@ def _blue_cmap():
     return LinearSegmentedColormap.from_list("ml_blue", BLUE_RAMP)
 
 
-def _ink_on(rgba) -> str:
-    """Dark or light text, whichever reads on a cell of this color."""
-    r, g, b = rgba[:3]
-    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-    return TEXT if lum > 0.55 else "#ffffff"
+def _style_colorbar(ax) -> None:
+    if ax.collections and getattr(ax.collections[0], "colorbar", None) is not None:
+        cb = ax.collections[0].colorbar
+        cb.outline.set_visible(False)
+        cb.ax.tick_params(length=0)
 
 
 def nmi(a: Sequence, b: Sequence) -> float:
@@ -166,6 +238,7 @@ def area_transitions(
 
 
 # ---------------------------------------------------------------- figures
+@_themed
 def implied_timescales(
     lags: Sequence[float],
     timescales: np.ndarray,
@@ -174,7 +247,7 @@ def implied_timescales(
     *,
     lag_unit: str = "proof steps",
     ax=None,
-    figsize=(3.4, 2.6),
+    figsize=(COLUMN_WIDTH, 2.4),
 ):
     """Implied timescales against lag time.
 
@@ -182,6 +255,7 @@ def implied_timescales(
     (same shape) draw a confidence band. The shaded region under the diagonal
     is where a timescale is faster than the lag and cannot be resolved.
     """
+    sns = _sns()
     lags = np.asarray(lags, dtype=float)
     ts = np.asarray(timescales, dtype=float)
     if ts.ndim == 1:
@@ -191,29 +265,40 @@ def implied_timescales(
     for name, arr in (("lower", lower), ("upper", upper)):
         if arr is not None and np.asarray(arr).reshape(ts.shape[0], -1).shape != ts.shape:
             raise ValueError(f"{name} must have the same shape as timescales")
+    n = ts.shape[1]
+    names = [f"$t_{{{k + 2}}}$" for k in range(n)]
+    long = pd.DataFrame({
+        "lag": np.repeat(lags, n),
+        "timescale": ts.ravel(),
+        "process": np.tile(names, lags.size),
+    })
     fig, ax = _new_ax(ax, figsize)
-    for k in range(ts.shape[1]):
-        c = color_for(k)
-        ax.plot(lags, ts[:, k], color=c, lw=2, marker="o", ms=3.5, label=f"$t_{{{k + 2}}}$")
-        if lower is not None and upper is not None:
-            lo = np.asarray(lower, float).reshape(ts.shape)[:, k]
-            hi = np.asarray(upper, float).reshape(ts.shape)[:, k]
-            ax.fill_between(lags, lo, hi, color=c, alpha=0.18, lw=0)
     ax.fill_between(lags, np.full_like(lags, 1e-12), lags, color=GRID, lw=0, zorder=0)
     ax.plot(lags, lags, color=TEXT_SECONDARY, lw=1, ls="--", zorder=1)
+    if lower is not None and upper is not None:
+        lo = np.asarray(lower, float).reshape(ts.shape)
+        hi = np.asarray(upper, float).reshape(ts.shape)
+        for k in range(n):
+            ax.fill_between(lags, lo[:, k], hi[:, k], color=color_for(k), alpha=0.18, lw=0)
+    sns.lineplot(
+        data=long, x="lag", y="timescale", hue="process", hue_order=names,
+        palette={nm: color_for(k) for k, nm in enumerate(names)},
+        marker="o", markersize=4, markeredgewidth=0, linewidth=2, ax=ax, legend=n > 1,
+    )
     ax.set_yscale("log")
     positive = ts[np.isfinite(ts) & (ts > 0)]
     if positive.size:
         ax.set_ylim(min(lags.min(), positive.min()) * 0.7, positive.max() * 1.5)
     ax.set_xlabel(f"lag $\\tau$ ({lag_unit})")
     ax.set_ylabel(f"implied timescale ({lag_unit})")
-    ax.grid(axis="y", color=GRID, lw=0.6)
-    _style(ax)
-    if ts.shape[1] > 1:
-        ax.legend(frameon=False, fontsize=7, loc="upper left")
+    ax.grid(axis="y")
+    if n > 1:  # above the plot, where it cannot sit on a line
+        ax.legend(title=None, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=n,
+                  borderaxespad=0.2, handlelength=1.5, columnspacing=1.0)
     return fig
 
 
+@_themed
 def chapman_kolmogorov(
     lags: Sequence[float],
     predicted: np.ndarray,
@@ -229,7 +314,9 @@ def chapman_kolmogorov(
     ``predicted[j]`` is the model's ``T(tau)^k`` and ``estimated[j]`` is
     ``T(k tau)`` estimated directly, both ``(m, m)`` macrostate transition
     matrices at ``lags[j] = k tau``. Panel ``(i, l)`` shows ``P(i -> l)``.
-    ``estimated_err`` (same shape) draws error bars on the estimate.
+    ``estimated_err`` (same shape) draws error bars on the estimate. The
+    default size fits the column up to three macrostates and the full text
+    width beyond that.
     """
     lags = np.asarray(lags, dtype=float)
     pred = np.asarray(predicted, dtype=float)
@@ -243,7 +330,9 @@ def chapman_kolmogorov(
     if len(labels) != m:
         raise ValueError("labels must have one entry per macrostate")
     _, plt = _plt()
-    figsize = figsize or (1.35 * m + 0.6, 1.2 * m + 0.6)
+    if figsize is None:
+        width = COLUMN_WIDTH if m <= 3 else TEXT_WIDTH
+        figsize = (width, min(width * 0.95, 1.1 * m + 0.7))
     fig, axes = plt.subplots(m, m, sharex=True, sharey=True, figsize=figsize, layout="constrained", squeeze=False)
     for i in range(m):
         for l in range(m):
@@ -252,18 +341,19 @@ def chapman_kolmogorov(
             if estimated_err is not None:
                 err = np.asarray(estimated_err, float)[:, i, l]
                 ax.errorbar(lags, est[:, i, l], yerr=err, fmt="none", ecolor=color_for(1), elinewidth=1)
-            ax.plot(lags, est[:, i, l], ls="none", marker="o", ms=4, color=color_for(1), label="estimate $T(k\\tau)$")
+            ax.plot(lags, est[:, i, l], ls="none", marker="o", ms=4, mew=0, color=color_for(1),
+                    label="estimate $T(k\\tau)$")
             ax.set_ylim(-0.05, 1.05)
             ax.text(0.95, 0.9, f"{labels[i]}$\\to${labels[l]}", transform=ax.transAxes,
-                    ha="right", va="top", fontsize=7, color=TEXT)
-            _style(ax)
-    fig.supxlabel(f"lag $k\\tau$ ({lag_unit})", fontsize=9, color=TEXT)
-    fig.supylabel("transition probability", fontsize=9, color=TEXT)
+                    ha="right", va="top", fontsize="small")
+    fig.supxlabel(f"lag $k\\tau$ ({lag_unit})", fontsize="medium")
+    fig.supylabel("transition probability", fontsize="medium")
     handles, names = axes[0, 0].get_legend_handles_labels()
-    fig.legend(handles, names, loc="outside upper center", ncol=2, frameon=False, fontsize=7)
+    fig.legend(handles, names, loc="outside upper center", ncol=2)
     return fig
 
 
+@_themed
 def transition_heatmap(
     T: np.ndarray,
     labels: Sequence[str] | None = None,
@@ -271,9 +361,10 @@ def transition_heatmap(
     annotate: bool = True,
     check_stochastic: bool = True,
     ax=None,
-    figsize=(3.2, 2.8),
+    figsize=(COLUMN_WIDTH, 2.8),
 ):
     """Macrostate transition matrix as a heatmap (rows: from, columns: to)."""
+    sns = _sns()
     T = np.asarray(T, dtype=float)
     if T.ndim != 2 or T.shape[0] != T.shape[1]:
         raise ValueError("T must be square")
@@ -281,43 +372,47 @@ def transition_heatmap(
         raise ValueError("rows of T must sum to 1")
     m = T.shape[0]
     labels = list(labels) if labels is not None else [str(i) for i in range(m)]
+    if len(labels) != m:
+        raise ValueError("labels must have one entry per macrostate")
+    frame = pd.DataFrame(T, index=pd.Index(labels, name="from"), columns=pd.Index(labels, name="to"))
     fig, ax = _new_ax(ax, figsize)
-    cmap = _blue_cmap()
-    im = ax.imshow(T, cmap=cmap, vmin=0, vmax=1)
-    ax.set_xticks(range(m), labels)
-    ax.set_yticks(range(m), labels)
-    ax.set_xlabel("to")
-    ax.set_ylabel("from")
-    if annotate:
-        for i in range(m):
-            for j in range(m):
-                ax.text(j, i, f"{T[i, j]:.2f}", ha="center", va="center", fontsize=7,
-                        color=_ink_on(cmap(T[i, j])))
-    for s in ax.spines.values():
-        s.set_visible(False)
-    ax.tick_params(length=0, labelsize=8, labelcolor=TEXT)
-    cb = fig.colorbar(im, ax=ax, shrink=0.85)
-    cb.outline.set_visible(False)
-    cb.ax.tick_params(labelsize=7, colors=TEXT_SECONDARY, labelcolor=TEXT)
+    sns.heatmap(
+        frame, ax=ax, cmap=_blue_cmap(), vmin=0, vmax=1, square=True,
+        annot=annotate, fmt=".2f", annot_kws={"fontsize": "x-small"},
+        linewidths=1, linecolor="white", cbar_kws={"shrink": 0.85},
+    )
+    ax.tick_params(length=0)
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    _style_colorbar(ax)
     return fig
 
 
+@_themed
 def judge_cluster_confusion(
     clusters: Sequence | pd.Series,
     judge_labels: Sequence | pd.Series,
     *,
     normalize: str | None = "row",
+    annotate: bool | None = None,
+    show_nmi: bool = False,
     cluster_name: str = "macrostate",
     judge_name: str = "judge MSC",
     ax=None,
-    figsize=(4.0, 3.0),
+    figsize=(COLUMN_WIDTH, 2.8),
 ):
-    """Contingency of macrostates (rows) against judge MSC codes (columns), NMI in the title.
+    """Contingency of macrostates (rows) against judge MSC codes (columns).
+
+    The NMI between the two labelings is attached as ``fig.nmi`` for the
+    caption; ``show_nmi=True`` also writes it above the plot (for slides and
+    drafts, since ICML wants no titles inside figures).
 
     ``normalize`` is ``"row"`` (each macrostate sums to 1), ``"all"`` or
     ``None`` (raw counts). Pass the ``macrostate`` column of ``assignments``
     and the ``msc`` column of ``labels`` after merging on ``proof_id, step``.
+    ``annotate`` defaults to writing values only when the table has at most
+    64 cells.
     """
+    sns = _sns()
     c = pd.Series(np.asarray(clusters), name=cluster_name)
     j = pd.Series(np.asarray(judge_labels), name=judge_name)
     if len(c) != len(j):
@@ -336,40 +431,48 @@ def judge_cluster_confusion(
         shown = table.astype(float)
     else:
         raise ValueError("normalize must be 'row', 'all' or None")
-    fig, ax = _new_ax(ax, figsize)
-    cmap = _blue_cmap()
+    if annotate is None:
+        annotate = shown.size <= 64
+    shown.index = shown.index.map(str)
+    shown.columns = shown.columns.map(str)
     vmax = 1.0 if normalize else max(float(shown.to_numpy().max()), 1.0)
-    im = ax.imshow(shown.to_numpy(), cmap=cmap, vmin=0, vmax=vmax, aspect="auto")
-    ax.set_xticks(range(shown.shape[1]), [str(x) for x in shown.columns], rotation=90)
-    ax.set_yticks(range(shown.shape[0]), [str(x) for x in shown.index])
+    fig, ax = _new_ax(ax, figsize)
+    sns.heatmap(
+        shown, ax=ax, cmap=_blue_cmap(), vmin=0, vmax=vmax,
+        annot=annotate, fmt=".2f" if normalize else ".0f", annot_kws={"fontsize": "xx-small"},
+        linewidths=1, linecolor="white", cbar_kws={"shrink": 0.85},
+    )
     ax.set_xlabel(judge_name)
     ax.set_ylabel(cluster_name)
-    ax.set_title(f"NMI = {score:.2f}", fontsize=9, loc="left")
-    for s in ax.spines.values():
-        s.set_visible(False)
-    ax.tick_params(length=0, labelsize=7, labelcolor=TEXT)
-    ax.title.set_color(TEXT)
-    cb = fig.colorbar(im, ax=ax, shrink=0.85)
-    cb.outline.set_visible(False)
-    cb.ax.tick_params(labelsize=7, colors=TEXT_SECONDARY, labelcolor=TEXT)
-    fig.nmi = score  # handy for captions and tests
+    if show_nmi:
+        ax.set_title(f"NMI = {score:.2f}", loc="left")
+    ax.tick_params(length=0)
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
+    _style_colorbar(ax)
+    fig.nmi = score  # for the caption
     return fig
 
 
+@_themed
 def area_flow(
     transitions: pd.DataFrame,
     *,
     top: int | None = 12,
     area_names: dict | None = None,
     gap: float = 0.02,
+    show_summary: bool = False,
     ax=None,
-    figsize=(4.2, 3.4),
+    figsize=(COLUMN_WIDTH, 2.8),
 ):
     """Sankey-style flow between areas: a stacked "from" bar, a stacked "to" bar, bands between.
 
     ``transitions`` has columns ``from_area``, ``to_area``, ``count`` (see
-    :func:`area_transitions`). Only the ``top`` largest flows are drawn; the
-    title says how many moves that covers. Band color follows the source area.
+    :func:`area_transitions`). Only the ``top`` largest flows are drawn. For
+    the caption, ``fig.flows_shown``, ``fig.moves_shown`` and ``fig.moves_total``
+    say how much of the table that covers; ``show_summary=True`` also writes it
+    above the plot. Band color follows the source area.
+    seaborn has no flow plot, so this one is drawn with matplotlib patches in
+    the same style.
     """
     from matplotlib.patches import PathPatch, Rectangle
     from matplotlib.path import Path as MPath
@@ -408,10 +511,10 @@ def area_flow(
     xl, xr, w = 0.0, 1.0, 0.06
     for a, (b, t, _) in left.items():
         ax.add_patch(Rectangle((xl - w, b), w, t - b, color=color[a], lw=0))
-        ax.text(xl - w - 0.02, (b + t) / 2, str(names.get(a, a)), ha="right", va="center", fontsize=7, color=TEXT)
+        ax.text(xl - w - 0.02, (b + t) / 2, str(names.get(a, a)), ha="right", va="center", fontsize="small")
     for a, (b, t, _) in right.items():
         ax.add_patch(Rectangle((xr, b), w, t - b, color=color[a], lw=0))
-        ax.text(xr + w + 0.02, (b + t) / 2, str(names.get(a, a)), ha="left", va="center", fontsize=7, color=TEXT)
+        ax.text(xr + w + 0.02, (b + t) / 2, str(names.get(a, a)), ha="left", va="center", fontsize="small")
     for _, row in df.iterrows():
         h = row["count"] * scale
         lt = left[row["from_area"]][2]
@@ -427,15 +530,18 @@ def area_flow(
                  MPath.LINETO, MPath.CURVE4, MPath.CURVE4, MPath.CURVE4, MPath.CLOSEPOLY]
         ax.add_patch(PathPatch(MPath(verts, codes), facecolor=color[row["from_area"]], alpha=0.35, lw=0))
     ax.set_xlim(-0.35, 1.35)
-    ax.set_ylim(-0.02, 1.02)
+    ax.set_ylim(-0.08, 1.02)
     ax.axis("off")
-    ax.text(xl - w / 2, 1.05, "from", ha="center", fontsize=8, color=TEXT_SECONDARY)
-    ax.text(xr + w / 2, 1.05, "to", ha="center", fontsize=8, color=TEXT_SECONDARY)
-    ax.set_title(f"top {len(df)} flows, {shown / total:.0%} of {int(total)} moves", fontsize=8,
-                 color=TEXT_SECONDARY, loc="left")
+    ax.text(xl - w / 2, -0.03, "from", ha="center", va="top", fontsize="small", color=TEXT_SECONDARY)
+    ax.text(xr + w / 2, -0.03, "to", ha="center", va="top", fontsize="small", color=TEXT_SECONDARY)
+    if show_summary:
+        ax.set_title(f"top {len(df)} flows, {shown / total:.0%} of {int(total)} moves", loc="left",
+                     fontsize="small", color=TEXT_SECONDARY)
+    fig.flows_shown, fig.moves_shown, fig.moves_total = len(df), int(shown), int(total)
     return fig
 
 
+@_themed
 def search_ablation(
     results: pd.DataFrame,
     *,
@@ -443,51 +549,67 @@ def search_ablation(
     metric_col: str = "solved",
     group_col: str | None = None,
     err_col: str | None = None,
+    errorbar=("ci", 95),
     metric_label: str = "problems solved (%)",
     ax=None,
-    figsize=(3.6, 2.6),
+    figsize=(COLUMN_WIDTH, 2.4),
 ):
     """Bars for a search ablation: one bar per method, grouped by benchmark if ``group_col`` is set.
 
+    ``results`` is long-form: one row per method (and benchmark), or one row
+    per run when there are several seeds, in which case seaborn draws the mean
+    with ``errorbar`` (default a 95% bootstrap CI). Pass ``err_col`` instead to
+    draw errors you computed yourself; that needs exactly one row per bar.
     Method color follows the method's first appearance in ``results`` so the
-    same method keeps its color across benchmarks and figures built from the
-    same table.
+    same method keeps its color across benchmarks and figures.
     """
+    sns = _sns()
     cols = [method_col, metric_col] + [c for c in (group_col, err_col) if c]
     for col in cols:
         if col not in results.columns:
             raise KeyError(f"results is missing column {col!r}")
     methods = list(dict.fromkeys(results[method_col]))
-    groups = list(dict.fromkeys(results[group_col])) if group_col else [None]
+    data = results.copy()
+    gcol = group_col or "__group__"
+    if group_col is None:
+        data[gcol] = ""
+    groups = list(dict.fromkeys(data[gcol]))
+    if err_col and data.duplicated([method_col, gcol]).any():
+        raise ValueError("err_col needs exactly one row per method (and group)")
     fig, ax = _new_ax(ax, figsize)
-    n = len(methods)
-    width = 0.8 / n
-    for mi, meth in enumerate(methods):
-        xs, ys, es = [], [], []
-        for gi, g in enumerate(groups):
-            sel = results[method_col] == meth
-            if group_col:
-                sel &= results[group_col] == g
-            rows = results[sel]
-            if rows.empty:
-                continue
-            if len(rows) > 1:
-                raise ValueError(f"more than one row for method {meth!r} in group {g!r}")
-            xs.append(gi - 0.4 + width * (mi + 0.5))
-            ys.append(float(rows[metric_col].iloc[0]))
-            es.append(float(rows[err_col].iloc[0]) if err_col else 0.0)
-        ax.bar(xs, ys, width=width * 0.92, color=color_for(mi), label=str(meth),
-               yerr=es if err_col else None, error_kw={"elinewidth": 1, "ecolor": TEXT_SECONDARY, "capsize": 2})
-    if group_col:
-        ax.set_xticks(range(len(groups)), [str(g) for g in groups])
-    else:
-        ax.set_xticks([])
+    sns.barplot(
+        data=data, x=gcol, y=metric_col, hue=method_col, order=groups, hue_order=methods,
+        palette={m: color_for(i) for i, m in enumerate(methods)},
+        errorbar=None if err_col else errorbar, err_kws={"linewidth": 1, "color": TEXT_SECONDARY},
+        capsize=0.1, saturation=1, width=0.8, ax=ax,
+    )
+    if err_col:
+        from matplotlib.container import BarContainer
+
+        lookup = data.set_index([method_col, gcol])[err_col]
+        bar_containers = [c for c in ax.containers if isinstance(c, BarContainer)]
+        for meth, container in zip(methods, bar_containers):
+            for bar in container:
+                if not np.isfinite(bar.get_height()):
+                    continue
+                xc = bar.get_x() + bar.get_width() / 2
+                g = groups[int(round(xc))]
+                if (meth, g) not in lookup.index:
+                    continue
+                ax.errorbar(xc, bar.get_height(), yerr=float(lookup[(meth, g)]), fmt="none",
+                            ecolor=TEXT_SECONDARY, elinewidth=1, capsize=2)
+    ax.set_xlabel("")
     ax.set_ylabel(metric_label)
-    ax.grid(axis="y", color=GRID, lw=0.6)
+    if group_col is None:
+        ax.set_xticks([])
+    ax.grid(axis="y")
     ax.set_axisbelow(True)
-    _style(ax)
-    if n > 1:
-        ax.legend(frameon=False, fontsize=7, ncol=min(n, 3), loc="upper left")
+    legend = ax.get_legend()
+    if len(methods) > 1:  # above the bars, where it cannot cover one
+        sns.move_legend(ax, "lower left", bbox_to_anchor=(0, 1.0), title=None,
+                        ncol=min(len(methods), 3), borderaxespad=0.2, handlelength=1.0, columnspacing=1.0)
+    elif legend is not None:
+        legend.remove()
     return fig
 
 
@@ -498,7 +620,9 @@ def save_pdf(fig, path: str | Path, **kwargs) -> Path:
         path = path.with_suffix(".pdf")
     path.parent.mkdir(parents=True, exist_ok=True)
     kwargs.setdefault("bbox_inches", "tight")
-    fig.savefig(path, format="pdf", **kwargs)
+    matplotlib, _ = _plt()
+    with matplotlib.rc_context({"pdf.fonttype": 42}):  # embed TrueType, never Type 3
+        fig.savefig(path, format="pdf", **kwargs)
     return path
 
 
