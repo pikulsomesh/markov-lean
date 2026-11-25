@@ -10,3 +10,5 @@ lean/.lake/
 # secrets
 .env
 *.key
+data/processed/
+*.egg-info/

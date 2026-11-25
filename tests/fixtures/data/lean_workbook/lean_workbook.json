@@ -1,0 +1,1 @@
+[{"natural_language_statement": "Let a,b,c be positive", "answer": "2", "tags": "['inequality']", "formal_statement": "theorem lean_workbook_0 (a b c : \u211d) (ha : 0 < a) : a \u2264 a := by sorry", "split": "lean_workbook", "proof": "[]"}, {"natural_language_statement": "x", "answer": "", "tags": "[]", "formal_statement": "", "split": "lean_workbook", "proof": "[]"}]
