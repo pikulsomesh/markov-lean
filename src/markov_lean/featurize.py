@@ -7,7 +7,18 @@ truncated SVD.  An identifier such as ``Nat.Prime.two_le`` contributes:
   ``Nat.Prime.two_le``), so shared namespaces pull states together, and
 * its parts split on dots and underscores (``Prime``, ``two``, ``le``).
 
-Single-character names (``x``, ``h``) and pure numbers are dropped.  Other
+Single-character names (``x``, ``h``) and pure numbers are dropped.
+
+``view`` picks which part of the goal state is read (``state_view``):
+
+* ``"full"`` (default): the whole pretty-printed state, hypotheses included;
+* ``"typed"``: the hypotheses' types and the goals, without binder names
+  (``hx : 0 < x`` reads as ``0 < x``) or ``case`` tags;
+* ``"goal"``: only the goals after ``⊢``.
+
+On LeanDojo about 87% of a state's characters are hypotheses, and binder
+names such as ``hfp`` or ``hmin`` are mostly specific to one proof, so the
+full view clusters goal states by proof rather than by area.  Other
 featurizers, such as a sentence-embedding model, plug in through
 ``register_featurizer`` and ``make_featurizer``; none of them may need the
 network at import time.
@@ -49,6 +60,54 @@ def lean_tokens(text: str) -> list[str]:
     return out
 
 
+_CASE = re.compile(r"^case(\s|$)")
+# a hypothesis line: one or more binder names, then " : " and the type
+_BINDERS = re.compile(r"^(?:[^\s:]+ )*[^\s:]+ : ")
+VIEWS = ("full", "typed", "goal")
+
+
+def state_view(text: str, view: str = "full") -> str:
+    """The part of a pretty-printed goal state that ``view`` reads (see the module docstring).
+
+    Continuation lines (indented) stay with the hypothesis or goal they belong to.
+    """
+    if view == "full":
+        return text
+    if view not in VIEWS:
+        raise ValueError(f"unknown view {view!r}; known: {VIEWS}")
+    out: list[str] = []
+    keep = False
+    for line in text.split("\n"):
+        if not line.strip():
+            keep = False
+            continue
+        if line[0].isspace():  # continuation of the previous hypothesis or goal
+            if keep:
+                out.append(line)
+            continue
+        if line.startswith("⊢"):
+            out.append(line[1:])
+            keep = True
+        elif _CASE.match(line):
+            keep = False
+        elif view == "typed":
+            out.append(_BINDERS.sub("", line, count=1))
+            keep = True
+        else:
+            keep = False
+    return "\n".join(out)
+
+
+@dataclass(frozen=True)
+class ViewTokens:
+    """Picklable analyzer: ``lean_tokens`` of one ``state_view``."""
+
+    view: str = "full"
+
+    def __call__(self, text: str) -> list[str]:
+        return lean_tokens(state_view(text, self.view))
+
+
 class Featurizer(Protocol):
     """Anything that maps a list of goal states to an ``(n, d)`` float array."""
 
@@ -59,17 +118,20 @@ class Featurizer(Protocol):
 
 @dataclass
 class TfidfSvdFeaturizer:
-    """TF-IDF over identifier tokens, then TruncatedSVD, then L2 row normalization."""
+    """TF-IDF over identifier tokens of one ``view`` of the state, then TruncatedSVD, then L2 row normalization."""
 
     n_components: int = 64
-    min_df: int = 2
+    min_df: int | float = 2
     max_df: float = 0.95
     sublinear_tf: bool = True
     seed: int = 0
+    view: str = "full"
 
     def __post_init__(self) -> None:
+        if self.view not in VIEWS:
+            raise ValueError(f"unknown view {self.view!r}; known: {VIEWS}")
         self.vectorizer = TfidfVectorizer(
-            analyzer=lean_tokens,
+            analyzer=lean_tokens if self.view == "full" else ViewTokens(self.view),
             min_df=self.min_df,
             max_df=self.max_df,
             sublinear_tf=self.sublinear_tf,
