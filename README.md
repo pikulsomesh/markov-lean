@@ -14,6 +14,7 @@ This repo treats each proof as a trajectory of goal states, clusters the states 
 | `configs/` | run configs |
 | `docs/schema.md` | the tables every module reads and writes |
 | `docs/data_card.md` | where each dataset comes from and its license |
+| `docs/local_judge.md` | a third, local MSC judge (Ollama on the Mac Mini) and the cross-family agreement report |
 
 ## Where things run
 

@@ -483,8 +483,15 @@ def judge_tests(raw: pd.DataFrame | None, judges: list[str] | None, n_boot: int,
 
 def run(run_dir: str | Path, out_dir: str | Path | None = None, *, steps_path=None, labels_path=None,
         config_path=None, judges: list[str] | None = None, ks: list[int] | None = None, n_boot: int = 2000,
-        n_perm: int = 1000, seed: int = 0, alpha: float = 0.05, verbose: bool = True) -> dict:
-    """Run every test on a pilot run directory and write ``significance.json`` and ``significance.md``."""
+        n_perm: int = 1000, seed: int = 0, alpha: float = 0.05, verbose: bool = True,
+        extra_labels: list[str | Path] | None = None) -> dict:
+    """Run every test on a pilot run directory and write ``significance.json`` and ``significance.md``.
+
+    ``extra_labels`` are labels tables from further judges (for example the
+    local Ollama judge). They never enter the consensus that gate 1 scores;
+    they add a cross-family section: pairwise and Fleiss' kappa over all
+    judges, and each judge's NMI with the macrostates (``markov_lean.agreement``).
+    """
     run_dir = Path(run_dir)
     out = Path(out_dir) if out_dir else run_dir / "significance"
     say = print if verbose else (lambda *a, **k: None)
@@ -506,6 +513,20 @@ def run(run_dir: str | Path, out_dir: str | Path | None = None, *, steps_path=No
     jt = judge_tests(inp["raw_labels"], judges or (inp["pilot_report"].get("judge_agreement") or {}).get("judges"),
                      n_boot, seed)
 
+    cross = None
+    if extra_labels:
+        from . import agreement
+
+        if inp["raw_labels"] is None:
+            raise FileNotFoundError("--extra-labels needs the API judges' labels.parquet as well")
+        raw = inp["raw_labels"]
+        extra = agreement.load_labels([str(x) for x in extra_labels])
+        extra = extra[~extra["judge"].astype(str).isin(set(raw["judge"].astype(str)))]
+        allj = pd.concat([raw, extra], ignore_index=True)
+        allj = allj[allj["judge"].astype(str) != "consensus"].drop_duplicates(KEY + ["judge"])
+        cross = agreement.judge_agreement(allj, None, n_boot, seed)
+        cross["nmi"] = agreement.macrostate_nmi(allj, cross["judges"], res, inp["steps"], n_boot, seed)
+
     d = gate["vs_folder"]["msm"]
     report = {
         "run": str(run_dir),
@@ -524,6 +545,7 @@ def run(run_dir: str | Path, out_dir: str | Path | None = None, *, steps_path=No
         },
         **gate,
         "judge_agreement": jt,
+        "cross_family": cross,
     }
     out.mkdir(parents=True, exist_ok=True)
     (out / "significance.json").write_text(json.dumps(report, indent=2, default=_jsonable))
@@ -620,6 +642,11 @@ def markdown(rep: dict) -> str:
                 continue
             lines.append(f"| {level} | {v['n']} | {v['n_proofs']} | {_f(v['kappa'])} {_ci(v['kappa_ci95'])} | "
                          f"{_f(v['raw_agreement'])} {_ci(v['raw_agreement_ci95'])} |")
+    if rep.get("cross_family"):
+        from .agreement import markdown as agreement_markdown
+
+        lines += ["", agreement_markdown(rep["cross_family"]).replace("# Judge agreement", "## Judge agreement", 1)
+                  .replace("\n## ", "\n### ")]
     return "\n".join(lines) + "\n"
 
 
@@ -641,9 +668,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--n-perm", type=int, default=1000)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--alpha", type=float, default=0.05)
+    p.add_argument("--extra-labels", nargs="+", default=None,
+                   help="labels from further judges (e.g. the local Ollama judge's labels.parquet): reported as "
+                        "cross-family agreement and NMI per judge, never used for the gate's consensus")
     a = p.parse_args(argv)
     run(a.run, a.out, steps_path=a.steps, labels_path=a.labels, config_path=a.config, judges=a.judges, ks=a.ks,
-        n_boot=a.n_boot, n_perm=a.n_perm, seed=a.seed, alpha=a.alpha)
+        n_boot=a.n_boot, n_perm=a.n_perm, seed=a.seed, alpha=a.alpha, extra_labels=a.extra_labels)
     return 0
 
 
