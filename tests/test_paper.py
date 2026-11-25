@@ -158,7 +158,7 @@ def test_every_input_fills_figures_tables_and_numbers(tmp_path, paper_dir):
     assert v["resSearchSeeds"] == "2"
     assert v["resSearchBaseMiniF"] == "25.0" and v["resSearchAreaMiniF"] == "50.0"
     assert v["resSearchGainMiniF"] == "$+25.0$~points"
-    assert v["resSearchGainProofNet"] == r"\tbd"  # never run, so the text keeps its dash
+    assert "resSearchGainProofNet" not in v  # the paper uses PutnamBench, so no ProofNet macros unless it runs
     assert int(v["resFlowsShown"]) >= 1 and 0 < int(v["resFlowCoverage"]) <= 100
 
     data = (figs / "table_data.tex").read_text()
@@ -397,6 +397,11 @@ def test_table_areas_preview_matches_code():
     # cells no run can fill print a plain dash; everything else waits in red
     assert rows["Synthetic, planted areas"] == [r"\tbd", "--", r"\tbd"]
     assert all(r"\tbd" in c for c in rows["Macrostates ($m = 10$)"])
+
+
+def test_proofnet_macros_only_when_it_runs():
+    assert not any("ProofNet" in m for m in P.MACROS)
+    assert P.macro_suffix("proofnet") == "ProofNet" and P.macro_suffix("putnam") == "Putnam"
 
 
 def test_tex_ci():
