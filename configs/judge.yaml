@@ -17,7 +17,7 @@ batch:
   timeout_hours: 24
 
 budget:
-  max_dollars: 20.0         # hard cap per submit; --max-dollars can only lower it
+  max_dollars: 85.0         # hard cap per submit; --max-dollars can only lower it. All 8,423 pilot proofs estimate about $78
 
 pricing:                    # USD per million tokens at standard rates (checked 2026-11-25)
   batch_discount: 0.5       # Message Batches bill at half price
