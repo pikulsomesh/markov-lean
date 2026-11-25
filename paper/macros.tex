@@ -8,4 +8,4 @@
 \newcommand{\maybefigure}[2]{%
   \IfFileExists{figures/#1.pdf}%
     {\includegraphics[width=#2]{figures/#1.pdf}}%
-    {\fbox{\parbox[c][0.45\linewidth][c]{#2}{\centering\small figures/#1.pdf\\not rendered yet}}}}
+    {\fbox{\parbox[c][0.45\linewidth][c]{#2}{\centering\scriptsize\texttt{\detokenize{#1}}\\not rendered yet}}}}

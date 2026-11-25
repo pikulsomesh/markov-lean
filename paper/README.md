@@ -10,6 +10,8 @@ make          # main.pdf, with latexmk if installed, else pdflatex + bibtex
 make style    # says whether the ICML style or the article fallback will be used
 ```
 
+`main.pdf` is the latest build, committed so the draft can be read on GitHub. Rebuild and commit it when the text changes. It needs a TeX distribution with latexmk: MacTeX on the Mac, or `texlive-latex-extra`, `texlive-fonts-recommended` and `latexmk` on Debian/Ubuntu.
+
 `main.tex` follows the official ICML 2027 `example_paper.tex`. It falls back to the plain article class (natbib, `plainnat`) only if `icml2027.sty` is missing.
 
 **Style files:** the ICML 2027 author kit is in this folder: `icml2027.sty`, `icml2027.bst`, and the `algorithm.sty`, `algorithmic.sty` and `fancyhdr.sty` it ships with. Leave them as they are; ICML checks submissions against the official style. The kit's `example_paper.tex` and `example_paper.bib` aren't copied in, since `main.tex` already follows them.
