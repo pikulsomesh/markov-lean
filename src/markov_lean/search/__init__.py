@@ -3,6 +3,8 @@
 * :mod:`~markov_lean.search.lean_env`: tactic-mode wrapper around leanprover-community/repl.
 * :mod:`~markov_lean.search.prover`: DeepSeek-Prover-V1.5 tactic proposals over vLLM's
   OpenAI-compatible HTTP API (``httpx`` only; install the ``search`` extra).
+* :mod:`~markov_lean.search.local_prover`: the same proposals from a local GGUF through
+  llama.cpp, for smoke tests on a Mac (``prover.backend: llama_cpp``; see MAC_SMOKE.md).
 * :mod:`~markov_lean.search.best_first`: best-first search with a pluggable prior.
 * :mod:`~markov_lean.search.runner`: benchmark runs, ``python -m markov_lean.search``.
 
@@ -20,6 +22,8 @@ _EXPORTS = {
     "TacticResult": "lean_env",
     "Candidate": "prover",
     "ProverClient": "prover",
+    "make_proposer": "prover",
+    "LlamaCppProver": "local_prover",
     "build_prompt": "prover",
     "BestFirstSearch": "best_first",
     "SearchConfig": "best_first",
