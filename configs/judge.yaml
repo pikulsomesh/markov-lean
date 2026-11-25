@@ -1,0 +1,32 @@
+# MSC judges (src/markov_lean/judge.py). Two judges label the same proofs independently.
+judges:
+  - model: claude-haiku-5-5
+    max_tokens: 4096     # adaptive thinking is on by default and counts toward this
+    effort: low          # classification; raise to medium if agreement is poor
+  - model: claude-sonnet-5-5
+    max_tokens: 4096
+    effort: low
+
+prompt:
+  max_steps_per_proof: 48   # longer proofs show an even sample of 48 steps
+  max_state_chars: 1500     # goal states longer than this are cut in the middle
+
+batch:
+  chunk_size: 10000         # requests per Message Batch (API limit 100,000 or 256 MB)
+  poll_seconds: 60
+  timeout_hours: 24
+
+budget:
+  max_dollars: 20.0         # hard cap per submit; --max-dollars can only lower it
+
+pricing:                    # USD per million tokens at standard rates (checked 2026-11-25)
+  batch_discount: 0.5       # Message Batches bill at half price
+  models:
+    claude-haiku-5-5: {input: 0.10, output: 0.50}    # prompts up to 100K tokens
+    claude-sonnet-5-5: {input: 2.00, output: 10.00}
+
+estimate:                   # heuristics for the pre-submit estimate (no token-counting calls)
+  chars_per_token: 3.0      # Lean goal states are symbol-dense; 3 chars/token errs high
+  thinking_tokens: 400      # per request at effort low
+  output_tokens_fixed: 60
+  output_tokens_per_step: 30
