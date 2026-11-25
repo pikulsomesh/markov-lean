@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: markov-lean
+Version: 0.1.0
+Summary: Area transitions in Lean proofs: Markov state models over goal-state trajectories, and area-aware proof search.
+Requires-Python: >=3.10
+Requires-Dist: numpy>=1.26
+Requires-Dist: scipy>=1.11
+Requires-Dist: scikit-learn>=1.4
+Requires-Dist: pandas>=2.1
+Requires-Dist: pyarrow>=14
+Requires-Dist: deeptime>=0.4.4
+Requires-Dist: pyyaml>=6
+Provides-Extra: judge
+Requires-Dist: anthropic>=0.70; extra == "judge"
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"

@@ -1,0 +1,11 @@
+name = "MarkovLean"
+defaultTargets = ["MarkovLean"]
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+# Set by scripts/setup_lean.sh to the newest stable Mathlib tag.
+rev = "PINNED_BY_SETUP"
+
+[[lean_lib]]
+name = "MarkovLean"

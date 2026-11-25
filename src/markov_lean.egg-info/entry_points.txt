@@ -1,0 +1,2 @@
+[console_scripts]
+markov-lean = markov_lean.cli:main
