@@ -63,7 +63,7 @@ progress threshold, and how $\lambda$ was chosen (validation split only).}
   \maybefigure{search_ablation}{0.6\linewidth}
   \caption{Problems solved under the same budget with the language-model
   prior alone and with the area prior. Error bars are 95\% bootstrap
-  intervals over \todo{n} seeds.}
+  intervals over \resSearchSeeds{} seeds.}
   \label{fig:search}
 \end{figure}
 
@@ -75,20 +75,9 @@ miniF2F (244) and ProofNet (186) test splits.}
 
 \begin{table}[t]
   \caption{Problems solved (\%) under the same budget, mean over
-  \todo{n} seeds. Each ablation row switches off one factor of $g$.
+  \resSearchSeeds{} seeds. Each ablation row switches off one factor of $g$.
   \todo{fill from the search runs.}}
   \label{tab:search}
   \centering\small
-  \begin{tabular}{lcc}
-    \toprule
-    Prior & miniF2F & ProofNet \\
-    \midrule
-    LM only ($\lambda = 0$)           & \tbd & \tbd \\
-    Area prior ($\lambda = 0.3$)      & \tbd & \tbd \\
-    \quad without dynamics term       & \tbd & \tbd \\
-    \quad without visit term ($\alpha = 0$) & \tbd & \tbd \\
-    \quad without stall term ($\beta = 0$)  & \tbd & \tbd \\
-    Random partition, same sizes      & \tbd & \tbd \\
-    \bottomrule
-  \end{tabular}
+  \resultstable{table_search}
 \end{table}
