@@ -1,0 +1,4 @@
+id,statement,msc
+k1,"theorem inf_primes : ∀ n : ℕ, ∃ p, n ≤ p ∧ p.Prime",11A41
+k2,"theorem ivt (f : ℝ → ℝ) (hf : Continuous f) (a b : ℝ) (h : f a < 0 ∧ 0 < f b) : ∃ c, f c = 0",26A15;54C05
+k3,"theorem lagrange {G : Type*} [Group G] [Fintype G] (H : Subgroup G) [Fintype H] : Fintype.card H ∣ Fintype.card G",20D60
