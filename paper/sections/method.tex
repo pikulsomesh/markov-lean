@@ -1,23 +1,65 @@
 \section{Method}
 \label{sec:method}
+% DRAFT (Claude): awaits the author's rewrite. Every setting below matches
+% configs/pilot.yaml and src/markov_lean/{featurize,msm,judge}.py at the time
+% of writing; recheck before submission.
 
 \subsection{Proofs as trajectories}
 % Data contract: docs/schema.md, table `steps`.
 Each proof is a sequence of goal states $\state_0, \state_1, \dots, \state_n$,
-where $\state_t$ is the pretty-printed goal before tactic $t$.
-\todo{featurizer: how goal states become vectors.}
+where $\state_t$ is the pretty-printed goal before tactic $t$. Time is counted
+in proof steps, so a lag $\lag$ and every timescale below are numbers of
+tactics within one proof. Each proof is its own trajectory: no transition is
+counted from the end of one proof to the start of the next.
+
+We map each goal state to a vector with TF-IDF over Lean identifiers followed
+by a truncated SVD to 128 dimensions and $\ell_2$ normalization. An
+identifier such as \texttt{Nat.Prime.two\_le} contributes its full name, each
+namespace prefix (\texttt{Nat}, \texttt{Nat.Prime}) and its parts split on
+dots and underscores (\texttt{Prime}, \texttt{two}, \texttt{le}), so states
+that share namespaces land close together. Single-character names and bare
+numbers are dropped. \todo{if a sentence-embedding featurizer is added,
+describe it and cite it here.}
 
 \subsection{Microstates and the transition matrix}
 % Table `assignments`, column `microstate`.
-\todo{k-means microstates; count matrix at lag $\lag$ steps; reversible maximum-likelihood estimate of $\T(\lag)$.}
+We cluster the state vectors into $n$ microstates with mini-batch $k$-means,
+choosing $n \in \{100, 200, 400\}$ by the VAMP-2 score on held-out proofs.
+At lag $\lag$ we count transitions $C_{ij}(\lag)$ from microstate $i$ at step
+$t$ to $j$ at step $t+\lag$ with a sliding window within each proof, keep the
+largest strongly connected set, and estimate a reversible maximum-likelihood
+transition matrix $\T(\lag)$ with deeptime \citep{hoffmann2022deeptime}.
 
 \subsection{Metastable areas}
 % Table `assignments`, columns `macrostate`, `membership`.
-\todo{PCCA+ on the leading eigenvectors; choosing the number of macrostates from the implied-timescale gap.}
+PCCA+ \citep{deuflhard2005pcca,roblitz2013fuzzy} groups microstates into
+$m$ metastable sets using the leading eigenvectors of $\T(\lag)$, and returns
+a membership matrix $\chi \in [0,1]^{n \times m}$ whose rows sum to one. Each
+step's macrostate is the set with the largest membership. We fix $m = 10$
+before looking at any labels, and report agreement for
+$m \in \{2, 4, \dots, 12\}$ alongside it.
 
 \subsection{Validation}
-\todo{implied timescales $t_i(\lag) = -\lag / \ln|\lambda_i(\lag)|$ against lag; Chapman--Kolmogorov test $\T(\lag)^k \approx \T(k\lag)$ \citep{prinz2011markov}.}
+The implied timescales
+\begin{equation}
+  t_i(\lag) = -\frac{\lag}{\ln |\lambda_i(\lag)|}
+\end{equation}
+are computed from the eigenvalues $\lambda_i$ of $\T(\lag)$. If the dynamics
+are Markovian at lag $\lag$, the slow $t_i$ stop changing as $\lag$ grows; we
+pick the smallest lag at which they do. The Chapman--Kolmogorov test then
+checks that $\T(\lag)^k \approx \T(k\lag)$ on the macrostates
+\citep{prinz2011markov}. Error bars come from a bootstrap over proofs with a
+fixed seed. Because most traced proofs are short, we keep proofs with at
+least 8 steps, so that a lag several steps long still leaves transitions to
+count.
 
 \subsection{LLM judges}
 % Table `labels`.
-\todo{two judges assign a two-digit MSC 2020 code \citep{msc2020} per step and per proof; agreement between judges; NMI between macrostates and judge labels.}
+No Lean source carries area labels, so two LLM judges, Claude Haiku 5.5 and
+Claude Sonnet 5.5, independently assign a two-digit MSC 2020 code
+\citep{msc2020} to each of 1{,}000 sampled proofs and to each of their steps.
+We report Cohen's $\kappa$ between the judges and each judge's accuracy on
+statements whose MSC code is known, and score macrostates against the
+judges' consensus with normalized mutual information (NMI) and the adjusted
+Rand index. The baseline partition labels every step of a proof with the
+top-level Mathlib folder of its source file.

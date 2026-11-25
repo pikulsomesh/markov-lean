@@ -187,7 +187,168 @@
   doi       = {10.1007/978-3-030-79876-5_37}
 }
 
+% ---- Related work: search, premise selection, library structure, LLM judges.
+% Each entry below was read on the primary page(s) named in its comment.
+
+% Verified: arxiv.org/abs/2009.03393 (title, authors, v1 2020-09-07; no venue or DOI).
+@misc{polu2020generative,
+  title         = {Generative Language Modeling for Automated Theorem Proving},
+  author        = {Polu, Stanislas and Sutskever, Ilya},
+  year          = {2020},
+  eprint        = {2009.03393},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG}
+}
+
+% Verified: proceedings.neurips.cc NeurIPS 2022 abstract page (title, author order,
+% vol. 35, pp. 26337-26349, DOI) and arxiv.org/abs/2205.11491. Author order follows
+% NeurIPS (arXiv v1 differs); accents taken from arXiv.
+@inproceedings{lample2022hypertree,
+  title         = {{HyperTree} Proof Search for Neural Theorem Proving},
+  author        = {Lample, Guillaume and Lacroix, Timoth{\'e}e and Lachaux, Marie-Anne and Rodriguez, Aur{\'e}lien and Hayat, Amaury and Lavril, Thibaut and Ebner, Gabriel and Martinet, Xavier},
+  booktitle     = {Advances in Neural Information Processing Systems},
+  volume        = {35},
+  pages         = {26337--26349},
+  year          = {2022},
+  doi           = {10.52202/068431-1910},
+  eprint        = {2205.11491},
+  archivePrefix = {arXiv}
+}
+
+% Verified: proceedings.mlr.press/v97/yang19a.html (PMLR 97, pp. 6984-6994, editors)
+% and arxiv.org/abs/1905.09381.
+@inproceedings{yang2019learning,
+  title         = {Learning to Prove Theorems via Interacting with Proof Assistants},
+  author        = {Yang, Kaiyu and Deng, Jia},
+  booktitle     = {Proceedings of the 36th International Conference on Machine Learning},
+  series        = {Proceedings of Machine Learning Research},
+  volume        = {97},
+  pages         = {6984--6994},
+  editor        = {Chaudhuri, Kamalika and Salakhutdinov, Ruslan},
+  publisher     = {PMLR},
+  year          = {2019},
+  eprint        = {1905.09381},
+  archivePrefix = {arXiv}
+}
+
+% Verified: proceedings.mlr.press/v235/blaauwbroek24a.html (PMLR 235, pp. 4046-4076,
+% editors) and arxiv.org/abs/2401.02949. Author names as on PMLR.
+@inproceedings{blaauwbroek2024graph2tac,
+  title         = {{Graph2Tac}: Online Representation Learning of Formal Math Concepts},
+  author        = {Blaauwbroek, Lasse and Ol{\v{s}}{\'a}k, Mirek and Rute, Jason and Schaposnik Massolo, Fidel Ivan and Piepenbrock, Jelle and Pestun, Vasily},
+  booktitle     = {Proceedings of the 41st International Conference on Machine Learning},
+  series        = {Proceedings of Machine Learning Research},
+  volume        = {235},
+  pages         = {4046--4076},
+  publisher     = {PMLR},
+  year          = {2024},
+  eprint        = {2401.02949},
+  archivePrefix = {arXiv}
+}
+
+% Verified: proceedings.iclr.cc ICLR 2024 abstract page (authors, pp. 39326-39350;
+% no DOI shown) and arxiv.org/abs/2303.04488. Author names as on the ICLR page.
+@inproceedings{mikula2024magnushammer,
+  title         = {Magnushammer: A Transformer-Based Approach to Premise Selection},
+  author        = {Miku{\l}a, Maciej and Tworkowski, Szymon and Antoniak, Szymon and Piotrowski, Bartosz and Jiang, Qiaochu and Zhou, Jin and Szegedy, Christian and Kuci{\'n}ski, {\L}ukasz and Mi{\l}o{\'s}, Piotr and Wu, Yuhuai},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  pages         = {39326--39350},
+  year          = {2024},
+  eprint        = {2303.04488},
+  archivePrefix = {arXiv}
+}
+
+% Verified: proceedings.iclr.cc ICLR 2025 abstract page (authors, pp. 73525-73564)
+% and arxiv.org/abs/2410.06209. Author names as on the ICLR page.
+@inproceedings{kumarappan2025leanagent,
+  title         = {{LeanAgent}: Lifelong Learning for Formal Theorem Proving},
+  author        = {Kumarappan, Adarsh and Tiwari, Mohit and Song, Peiyang and George, Robert Joseph and Xiao, Chaowei and Anandkumar, Anima},
+  booktitle     = {International Conference on Learning Representations (ICLR)},
+  pages         = {73525--73564},
+  year          = {2025},
+  eprint        = {2410.06209},
+  archivePrefix = {arXiv}
+}
+
+% Verified: PubMed Central full text PMC4599631 (J. Symbolic Computation 69,
+% pp. 109-128, 2015, DOI) and arxiv.org/abs/1402.3578. ScienceDirect not reached.
+@article{kaliszyk2015learning,
+  title         = {Learning-assisted theorem proving with millions of lemmas},
+  author        = {Kaliszyk, Cezary and Urban, Josef},
+  journal       = {Journal of Symbolic Computation},
+  volume        = {69},
+  pages         = {109--128},
+  year          = {2015},
+  doi           = {10.1016/j.jsc.2014.09.032},
+  eprint        = {1402.3578},
+  archivePrefix = {arXiv}
+}
+
+% Verified: proceedings.neurips.cc NeurIPS 2023 Datasets and Benchmarks page
+% (13 authors, vol. 36, pp. 46595-46623, DOI) and arxiv.org/abs/2306.05685.
+@inproceedings{zheng2023judging,
+  title         = {Judging {LLM}-as-a-Judge with {MT-Bench} and {Chatbot Arena}},
+  author        = {Zheng, Lianmin and Chiang, Wei-Lin and Sheng, Ying and Zhuang, Siyuan and Wu, Zhanghao and Zhuang, Yonghao and Lin, Zi and Li, Zhuohan and Li, Dacheng and Xing, Eric P. and Zhang, Hao and Gonzalez, Joseph E. and Stoica, Ion},
+  booktitle     = {Advances in Neural Information Processing Systems (Datasets and Benchmarks Track)},
+  volume        = {36},
+  pages         = {46595--46623},
+  year          = {2023},
+  doi           = {10.52202/075280-2020},
+  eprint        = {2306.05685},
+  archivePrefix = {arXiv}
+}
+
+% Verified: Springer chapter page for CICM 2015 (LNCS 9150, pp. 3-17, editors, DOI).
+@inproceedings{blanchette2015mining,
+  title     = {Mining the {Archive of Formal Proofs}},
+  author    = {Blanchette, Jasmin Christian and Haslbeck, Maximilian and Matichuk, Daniel and Nipkow, Tobias},
+  booktitle = {Intelligent Computer Mathematics (CICM 2015)},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {9150},
+  pages     = {3--17},
+  publisher = {Springer},
+  year      = {2015},
+  doi       = {10.1007/978-3-319-20615-8_1}
+}
+
+% Verified: Springer chapter page for CICM 2011 (LNCS 6824, DOI; no page range shown)
+% and arxiv.org/abs/1107.4721 (sole author). TODO: pages before camera-ready.
+@inproceedings{alama2011mizar,
+  title     = {mizar-items: Exploring Fine-Grained Dependencies in the {Mizar Mathematical Library}},
+  author    = {Alama, Jesse},
+  booktitle = {Intelligent Computer Mathematics (CICM 2011)},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {6824},
+  publisher = {Springer},
+  year      = {2011},
+  doi       = {10.1007/978-3-642-22673-1_19}
+}
+
+% Verified: link.springer.com/article/10.1007/s11192-014-1419-z (Scientometrics
+% 102(1), pp. 977-1001, 2015, DOI) and arxiv.org/abs/1409.1726.
+@article{cerinsek2015network,
+  title         = {Network analysis of {Zentralblatt MATH} data},
+  author        = {Cerin{\v{s}}ek, Monika and Batagelj, Vladimir},
+  journal       = {Scientometrics},
+  volume        = {102},
+  number        = {1},
+  pages         = {977--1001},
+  year          = {2015},
+  doi           = {10.1007/s11192-014-1419-z},
+  eprint        = {1409.1726},
+  archivePrefix = {arXiv}
+}
+
+% Verified: arxiv.org/abs/2604.24797v2 HTML and PDF (title, authors, cs.LO, v2 dated
+% 2026-05-04). Preprint, no venue. The closest prior work: Mathlib's dependency graph.
+@misc{li2026network,
+  title         = {The Network Structure of {Mathlib}},
+  author        = {Li, Xinze and Peng, Nanyun and Severini, Simone and Shafto, Patrick},
+  year          = {2026},
+  eprint        = {2604.24797},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LO}
+}
+
 % TODO (not yet verified, do not cite until checked):
-%  - prior work on topic or dependency structure in formal math libraries
-%    (sections/related.tex, "Structure of mathematical knowledge")
-%  - the featurizer's embedding model, once chosen
+%  - the featurizer's embedding model, if one replaces TF-IDF + SVD

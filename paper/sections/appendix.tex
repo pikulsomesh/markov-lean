@@ -1,3 +1,14 @@
 \section{Reproducibility}
 \label{app:repro}
-\todo{commit hash, configs/pilot.yaml, judge prompts and models, compute used.}
+% DRAFT (Claude): awaits the author's rewrite.
+
+All settings are in the repository's configuration files:
+\texttt{configs/pilot.yaml} for the data filter and the Markov state model,
+\texttt{configs/judge.yaml} for the judge models and prompt limits, and
+\texttt{configs/search.yaml} for the prover and the search budget. The proof
+sample, the clustering and the bootstrap use fixed seeds. The
+model was fit on an Apple M2 Mac Mini with 16 GB of memory; the prover ran
+behind vLLM on \todo{instance type}. The judges ran through the Anthropic
+Message Batches API with a spending cap of \$20 per submission.
+\todo{commit hash, total judge cost, total GPU hours; a release of the code
+that does not identify the author goes in the supplementary material.}

@@ -1,16 +1,23 @@
 % Required by the ICML 2027 author instructions: unnumbered, after the main
 % text and before the references; neither counts toward the page limit.
 % Acknowledgements also go here, but only in the camera-ready (anonymity).
+% DRAFT (Claude): awaits the author's rewrite. Keep it accurate to what was
+% actually done when the paper is finished.
 
 \section*{AI Use Statement}
-\todo{Required: a few sentences (at most one page) on how AI tools were used
-in the research and in preparing the paper, e.g.\ the LLM judge that labels
-areas, coding assistants and writing help. The authors remain responsible for
-all content; LLMs cannot be authors.}
+AI tools were used in two ways. First, as part of the method: two LLM judges,
+Claude Haiku 5.5 and Claude Sonnet 5.5, assign MSC 2020 codes to proofs and
+proof steps (Section~\ref{sec:method}), and DeepSeek-Prover-V1.5 proposes
+tactics during search (Section~\ref{sec:search}). Second, as an assistant: an
+AI coding assistant (Claude, through Claude Code) wrote most of the code,
+the figure scripts and first drafts of the text, and checked the references
+against their primary sources. The author designed the study, reviewed and
+ran the code, rewrote the text and checked every result and citation, and
+takes full responsibility for the content of the paper.
+\todo{author: confirm or correct this before submission.}
 
 \section*{Impact Statement}
-\todo{Required: the broader impact of the work. The template accepts this
-standard sentence when nothing needs highlighting: ``This paper presents work
-whose goal is to advance the field of Machine Learning. There are many
-potential societal consequences of our work, none which we feel must be
-specifically highlighted here.''}
+This paper presents work whose goal is to advance the field of Machine
+Learning. There are many potential societal consequences of our work, none
+which we feel must be specifically highlighted here.
+\todo{author: keep the standard sentence or replace it.}

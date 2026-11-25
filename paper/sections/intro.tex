@@ -1,17 +1,47 @@
 \section{Introduction}
 \label{sec:intro}
+% DRAFT (Claude): awaits the author's rewrite.
 
-% Story: proofs cross areas (an analysis lemma closed by an algebraic identity,
-% a number theory goal reduced to combinatorics). Provers branch blindly over
-% tactics; if area changes are regular, they are a signal for where to branch.
+Formal proofs often cross areas of mathematics. An inequality from analysis
+may close with an algebraic identity, and a number theory goal may reduce to
+a counting argument. A human prover notices these shifts and uses them: once
+a goal looks combinatorial, the right lemmas and tactics change. Neural
+provers for Lean \citep{yang2023leandojo,xin2025deepseekproverv15} have no
+explicit notion of area. They sample tactics from a language model and expand
+the most likely branches, so any knowledge of where a proof is heading lives
+implicitly in the model's weights.
 
-\todo{motivation: why area transitions matter for provers and for understanding formal mathematics.}
+We study area changes directly, borrowing a tool from molecular simulation.
+A Markov state model (MSM) describes a long trajectory through a
+high-dimensional space as jumps between a modest number of discrete states,
+and identifies sets of states the trajectory stays in for long stretches
+before switching \citep{prinz2011markov,husic2018markov}. In molecular
+dynamics the trajectory is a sequence of conformations and the metastable
+sets are conformational states. Here the trajectory is the sequence of goal
+states in a proof, the clock is the proof step, and our hypothesis is that
+the metastable sets correspond to areas of mathematics.
 
-\todo{the analogy: proof steps as a trajectory, goal states as conformations, areas as metastable sets; proof depth plays the role of time.}
+This framing gives testable claims. If proofs move between areas in a
+regular way, a Markov model at some lag $\lag$ should predict transitions at
+multiples of $\lag$ (the Chapman--Kolmogorov test), its slow implied
+timescales should stop changing as $\lag$ grows, and its metastable sets
+should agree with independent area labels better than a simple baseline.
+Mathematical areas carry no labels in Lean or Mathlib, so we label proofs
+with top-level MSC 2020 codes \citep{msc2020} from two LLM judges and measure
+how far the judges agree before trusting them. If the model holds up, it
+offers a signal for search: which area a candidate tactic leads to, and
+whether the search has been stuck in one area for too long.
 
 \paragraph{Contributions.}
 \begin{itemize}
-  \item \todo{a Markov state model over Lean goal-state trajectories from Mathlib and benchmark proofs \citep{yang2023leandojo}.}
-  \item \todo{validation of the metastable sets against MSC 2020 labels from two LLM judges.}
-  \item \todo{an area-aware prior for proof search, evaluated on miniF2F and ProofNet.}
+  \item A Markov state model over Lean goal-state trajectories, built from
+  LeanDojo's traced Mathlib proofs \citep{yang2023leandojo}, with every
+  standard MSM check reported (implied-timescale convergence,
+  Chapman--Kolmogorov, connectivity, bootstrap error bars).
+  \item A comparison of the model's metastable sets with MSC 2020 labels from
+  two LLM judges, against a baseline that labels each proof by its Mathlib
+  folder.
+  \item An area-aware prior for best-first proof search, evaluated on
+  miniF2F \citep{zheng2022minif2f} and ProofNet \citep{azerbayev2023proofnet}
+  under a fixed budget.
 \end{itemize}

@@ -1,7 +1,27 @@
 \section{Discussion}
 \label{sec:discussion}
+% DRAFT (Claude): awaits the author's rewrite. Revisit once results are in;
+% the claims below are framed as what each outcome would mean.
 
-\todo{what the timescales say about how proofs move between areas; limits of LLM judges as ground truth; what proof depth does and doesn't capture as a clock.}
+\todo{lead with what the timescales and NMI actually show.} If the slow
+implied timescales converge and the Chapman--Kolmogorov test passes, area
+changes within a proof follow a short-memory process that a few metastable
+sets describe. If instead the timescales keep growing with the lag, the next
+area depends on more history than the current goal state carries, for
+example on the proof strategy, which the goal state does not record.
+
+Proof depth is a crude clock. Two tactics can do very different amounts of
+work, and a single \texttt{simp} or \texttt{linarith} call can close a goal
+that would take a human several steps. Timescales measured in tactic steps
+therefore reflect Mathlib's proof style as much as the mathematics itself.
 
 \paragraph{Limitations.}
-\todo{featurizer choice, judge bias, benchmark contamination.}
+The featurizer sees identifiers, not meaning, so goals that share notation
+but not ideas can land in the same microstate. The judges' labels are a
+reference, not ground truth: two models from one family may share biases,
+which their agreement cannot reveal, and top-level MSC codes are coarse for
+proofs that genuinely mix areas. The traced proofs come from one Mathlib
+snapshot and are filtered to long proofs, which over-represents some areas.
+Finally, the search prover was trained on data that may overlap with the
+benchmarks, which affects the baseline and the area prior alike but limits
+what absolute numbers mean.

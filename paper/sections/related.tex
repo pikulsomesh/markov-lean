@@ -1,14 +1,55 @@
 \section{Related work}
 \label{sec:related}
+% DRAFT (Claude): awaits the author's rewrite. Every citation is in refs.bib
+% with the primary page it was checked against.
 
-\paragraph{Neural theorem proving in Lean.}
-\todo{LeanDojo \citep{yang2023leandojo}; Lean Workbook \citep{ying2024leanworkbook}; DeepSeek-Prover-V1.5 and its tree search \citep{xin2025deepseekproverv15}; Lean 4 and Mathlib \citep{demoura2021lean4,mathlib2020}.}
+\paragraph{Neural theorem proving.}
+Language-model provers generate one tactic or proof step at a time and
+search over the resulting tree: GPT-f on Metamath \citep{polu2020generative},
+ASTactic on Coq \citep{yang2019learning}, and HyperTree Proof Search, which
+learns from its own proof attempts \citep{lample2022hypertree}. In Lean 4
+\citep{demoura2021lean4}, LeanDojo traced Mathlib \citep{mathlib2020} into
+goal-state and tactic pairs and introduced retrieval-augmented proving
+\citep{yang2023leandojo}. Lean Workbook added a large set of formalized
+competition problems \citep{ying2024leanworkbook}, DeepSeek-Prover-V1.5
+combined reinforcement learning with tree search \citep{xin2025deepseekproverv15},
+and LeanAgent orders theorems by difficulty for lifelong learning across
+repositories \citep{kumarappan2025leanagent}. These systems treat the goal
+state as text for the policy. We instead model how goal states move through
+areas of mathematics and give that model to the search as a prior.
 
 \paragraph{Benchmarks.}
-\todo{miniF2F \citep{zheng2022minif2f}, ProofNet \citep{azerbayev2023proofnet}, PutnamBench \citep{tsoukalas2024putnambench}.}
+We evaluate search on miniF2F \citep{zheng2022minif2f} and ProofNet
+\citep{azerbayev2023proofnet}, and use PutnamBench
+\citep{tsoukalas2024putnambench} statements as additional unlabeled goals.
+
+\paragraph{Structure of formal and informal mathematics.}
+Premise selection uses the structure of a library directly. Kaliszyk and
+Urban mine the inference graphs of HOL Light and Flyspeck for useful lemmas
+\citep{kaliszyk2015learning}, Magnushammer retrieves premises with a
+contrastively trained transformer \citep{mikula2024magnushammer}, and
+Graph2Tac represents new Coq definitions through the graph of the concepts
+they use \citep{blaauwbroek2024graph2tac}. Other work measures libraries
+without proving anything: dependencies and proof style in the Isabelle
+Archive of Formal Proofs \citep{blanchette2015mining}, a minimal item-level
+dependency graph of the Mizar library \citep{alama2011mizar}, and the
+dependency network of Mathlib, in which about half of the declaration-level
+edges cross namespaces \citep{li2026network}. For informal mathematics,
+\citet{cerinsek2015network} map the field through MSC codes in zbMATH.
+All of these study static structure: which statement depends on which.
+We study dynamics: the order in which a single proof visits areas.
 
 \paragraph{Markov state models.}
-\todo{MSM construction and validation, including the Chapman--Kolmogorov test \citep{prinz2011markov,husic2018markov}; PCCA+ \citep{deuflhard2005pcca,roblitz2013fuzzy}; deeptime \citep{hoffmann2022deeptime}.}
+MSMs summarize long molecular simulations as jumps between discrete states
+and are validated by implied-timescale convergence and the
+Chapman--Kolmogorov test \citep{prinz2011markov,husic2018markov}. PCCA+
+groups states into metastable sets with soft memberships
+\citep{deuflhard2005pcca,roblitz2013fuzzy}. We use the deeptime
+implementation \citep{hoffmann2022deeptime}.
 
-\paragraph{Structure of mathematical knowledge.}
-\todo{MSC 2020 \citep{msc2020}; prior work on topic or dependency structure in formal libraries (verify before citing).}
+\paragraph{LLMs as judges.}
+Using an LLM to label or grade outputs is now common, and its biases, such
+as position and verbosity effects, are documented \citep{zheng2023judging}.
+Because no Lean source carries area labels, we use two judges from
+different model sizes, report their agreement, and check them on statements
+with known MSC codes before treating their labels as a reference.

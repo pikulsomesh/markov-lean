@@ -1,13 +1,52 @@
 \section{Area-aware proof search}
 \label{sec:search}
+% DRAFT (Claude): awaits the author's rewrite. Matches configs/search.yaml,
+% src/markov_lean/search/best_first.py and src/markov_lean/area_prior.py.
 
-\todo{how the area model enters search: a prior over which branch to expand, given the current macrostate membership.}
+\paragraph{Search.}
+We use best-first search over goal states in the style of GPT-f and HTPS
+\citep{polu2020generative,lample2022hypertree}. Expanding a node asks the
+prover, DeepSeek-Prover-V1.5-RL \citep{xin2025deepseekproverv15}, for 16
+tactic samples, runs each in Lean, and pushes every new goal state with
+score $\log \pi(a \mid s)$ added to its parent's, where $\pi$ is a prior
+over the candidates that produced a new state. With the baseline prior,
+$\pi$ is the softmax of the language model's log-probabilities. Each theorem
+gets at most 600 expansions, a depth of 64 and 600 seconds of wall time.
+
+\paragraph{Area prior.}
+The area prior reweights the same candidates by the area each one leads to.
+A goal state $s$ is featurized as in Section~\ref{sec:method} and
+soft-assigned to its nearest microstates; pushing those weights through the
+PCCA+ membership matrix $\chi$ gives a distribution $a(s)$ over the $m$
+areas. The target for the next step is
+\begin{equation}
+  g(s) \propto \bigl(a(s)\,\T_{\mathrm{c}}\bigr) \odot (1 + v)^{-\alpha}
+  \odot e^{-\beta\,o},
+\end{equation}
+where $\T_{\mathrm{c}}$ is the coarse-grained transition matrix, $v$ counts
+how often the search has visited each area, and $o$ is the fraction of the
+last $w$ expansions spent in each area, applied only when those expansions
+closed no goals. The first factor follows the dynamics the model learned,
+the second favors areas the search has explored less, and the third pushes
+the search out of an area where it has stalled, in the spirit of
+metadynamics. A candidate leading to state $s'$ scores $a(s')^{\top} g(s)$;
+a candidate that closes the goal scores 1. The scores are normalized to a
+distribution $p_{\mathrm{area}}$ and mixed with the language model,
+$\pi = (1-\lambda)\,p_{\mathrm{LM}} + \lambda\,p_{\mathrm{area}}$, with
+$\lambda = 0.3$, $\alpha = 0.5$ and $w = 8$. \todo{report $\beta$ and the
+progress threshold, and how $\lambda$ was chosen (validation split only).}
 
 \begin{figure}[t]
   \centering
   \maybefigure{search_ablation}{0.6\linewidth}
-  \caption{\todo{Problems solved under a fixed budget, with and without the area prior.}}
+  \caption{Problems solved under the same budget with the language-model
+  prior alone and with the area prior. Error bars are 95\% bootstrap
+  intervals over \todo{n} seeds.}
   \label{fig:search}
 \end{figure}
 
-\todo{prover, budget, benchmarks, ablations.}
+\paragraph{Ablations.}
+\todo{each factor of $g$ switched off in turn; $\lambda \in \{0, 0.1, 0.3,
+0.5\}$; a random partition with the same area sizes, to separate the
+effect of the areas from that of reweighting itself. Report results on the
+miniF2F (244) and ProofNet (186) test splits.}
