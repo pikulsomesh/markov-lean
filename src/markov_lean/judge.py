@@ -465,7 +465,18 @@ def parse_result(result: Any, entry: dict) -> tuple[list[dict], dict | None]:
         data = json.loads(text)
     except (TypeError, json.JSONDecodeError):
         return [], {**base, "issue": "bad_json", "detail": (text or "")[:200]}
+    return rows_from_output(data, entry, base)
 
+
+def rows_from_output(data: dict, entry: dict, base: dict | None = None) -> tuple[list[dict], dict | None]:
+    """Label rows from one parsed judge answer (the `output_schema` object). Returns (rows, issue or None).
+
+    Shared by the Message Batches judges and the local Ollama judge, so every
+    backend drops the same invalid codes, unknown steps and duplicates.
+    """
+    base = base or {"proof_id": entry["proof_id"], "judge": entry["judge"]}
+    if not isinstance(data, dict):
+        return [], {**base, "issue": "bad_json", "detail": "answer is not a JSON object"}
     rows, dropped = [], 0
     pc = msc.normalize(data.get("proof_msc"))
     if pc:
@@ -474,8 +485,11 @@ def parse_result(result: Any, entry: dict) -> tuple[list[dict], dict | None]:
     else:
         dropped += 1
     wanted, seen = set(entry["steps"]), set()
-    for s in data.get("steps", []):
-        step, code = s.get("step"), msc.normalize(s.get("msc"))
+    for s in data.get("steps") or []:
+        if not isinstance(s, dict):
+            dropped += 1
+            continue
+        step, code = _as_int(s.get("step")), msc.normalize(s.get("msc"))
         if step not in wanted or step in seen or code is None:
             dropped += 1
             continue
@@ -487,6 +501,19 @@ def parse_result(result: Any, entry: dict) -> tuple[list[dict], dict | None]:
     if dropped or missing:
         issue = {**base, "issue": "partial", "detail": f"{dropped} invalid, {missing} steps missing"}
     return rows, issue
+
+
+def _as_int(x: Any) -> int | None:
+    """A step number as int; small models sometimes write "3" or 3.0 for 3."""
+    if isinstance(x, bool):
+        return None
+    if isinstance(x, int):
+        return x
+    if isinstance(x, float) and x.is_integer():
+        return int(x)
+    if isinstance(x, str) and x.strip().lstrip("-").isdigit():
+        return int(x.strip())
+    return None
 
 
 def collect(client: Any, batch_ids: list[str], manifest: dict[str, dict]) -> tuple[pd.DataFrame, list[dict]]:
@@ -670,9 +697,10 @@ def main(argv: list[str] | None = None, client: Any = None) -> int:
     c = sub.add_parser("collect", help="wait for the run's batches and write labels.parquet")
     c.add_argument("--out", required=True)
     c.add_argument("--no-wait", action="store_true")
-    a = sub.add_parser("agree", help="agreement statistics between two judges")
+    a = sub.add_parser("agree", help="agreement statistics between two judges (three or more: pairwise and "
+                                     "Fleiss' kappa; see also `markov-lean judge-agreement`)")
     a.add_argument("--labels", required=True)
-    a.add_argument("--judges", nargs=2, help="default: the two judges in the config")
+    a.add_argument("--judges", nargs="+", help="default: the two judges in the config")
     a.add_argument("--consensus-out", help="also write consensus labels here")
     v = sub.add_parser("validate", help="score proof-level labels against statements with known codes")
     v.add_argument("--labels", required=True)
@@ -710,7 +738,19 @@ def main(argv: list[str] | None = None, client: Any = None) -> int:
         print(f"{len(labels)} labels written to {out / 'labels.parquet'}; issues: {counts or 'none'}")
     elif args.cmd == "agree":
         labels = _read_table(args.labels)
-        ja, jb = args.judges or cfg.models[:2]
+        judges = args.judges or cfg.models[:2]
+        if len(judges) > 2:
+            from markov_lean import agreement as multi
+
+            if args.consensus_out:
+                print("--consensus-out takes exactly two judges", file=sys.stderr)
+                return 2
+            print(json.dumps(multi.judge_agreement(labels, judges, n_boot=0), indent=1, default=str))
+            return 0
+        if len(judges) != 2:
+            print("--judges needs two or more judges", file=sys.stderr)
+            return 2
+        ja, jb = judges
         print(json.dumps(agreement(labels, ja, jb), indent=1))
         if args.consensus_out:
             consensus(labels, ja, jb).to_parquet(args.consensus_out, index=False)

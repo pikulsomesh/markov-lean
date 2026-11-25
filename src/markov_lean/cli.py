@@ -108,6 +108,18 @@ def _significance(rest: list[str]) -> int:
     return significance.main(rest)
 
 
+def _local_judge(rest: list[str]) -> int:
+    from markov_lean import ollama_judge
+
+    return ollama_judge.main(rest)
+
+
+def _judge_agreement(rest: list[str]) -> int:
+    from markov_lean import agreement
+
+    return agreement.main(rest)
+
+
 def _export_dataset(rest: list[str]) -> int:
     from markov_lean import release
 
@@ -128,6 +140,8 @@ PASSTHROUGH = {
     "search-report": (_search_report, "pass@k tables, paired tests and figures from search-eval runs"),
     "bridges": (_bridges, "tactics and lemmas at the steps where a proof switches area, with lift and CIs"),
     "significance": (_significance, "proof-level significance tests for gate 1 on a finished pilot run"),
+    "local-judge": (_local_judge, "label proofs with a local Ollama model as a third MSC judge (no API calls)"),
+    "judge-agreement": (_judge_agreement, "pairwise and Fleiss' kappa across judges, and each judge's NMI"),
     "export-dataset": (_export_dataset, "write the labelled dataset release folder from a pilot run (no upload)"),
     "check-release": (_check_release, "check a release folder is complete, consistent and free of keys/paths"),
 }
