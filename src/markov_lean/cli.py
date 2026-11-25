@@ -126,6 +126,12 @@ def _switches(rest: list[str]) -> int:
     return switches.main(rest)
 
 
+def _nonrev_check(rest: list[str]) -> int:
+    from markov_lean import nonrev
+
+    return nonrev.main(rest)
+
+
 def _export_dataset(rest: list[str]) -> int:
     from markov_lean import release
 
@@ -150,6 +156,7 @@ PASSTHROUGH = {
     "judge-agreement": (_judge_agreement, "pairwise and Fleiss' kappa across judges, and each judge's NMI"),
     "switches": (_switches, "within-proof area switching against shuffle, Markov, pooled and noise nulls"),
     "export-dataset": (_export_dataset, "write the labelled dataset release folder from a pilot run (no upload)"),
+    "nonrev-check": (_nonrev_check, "reversible vs non-reversible (GPCCA) and absorbing MSMs on the same microstates"),
     "check-release": (_check_release, "check a release folder is complete, consistent and free of keys/paths"),
 }
 
