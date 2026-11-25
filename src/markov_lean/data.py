@@ -80,6 +80,11 @@ def load_leandojo(
 
     ``min_steps`` drops proofs with fewer kept tactics (single-step proofs carry no
     transition information for the Markov model).
+
+    ``full_name`` is not unique in the real benchmark: private or local lemmas such as
+    ``aux`` appear in several files, so the second and later theorems with a name get
+    ``#2``, ``#3``, ... in ``proof_id`` (as ``_dedupe_ids`` does for ProofNet).  Without
+    this their steps share one ``proof_id`` and are read as one trajectory.
     """
     if strategy not in LEANDOJO_STRATEGIES:
         raise ValueError(f"strategy must be one of {LEANDOJO_STRATEGIES}")
@@ -88,15 +93,18 @@ def load_leandojo(
     path = Path(root) / strategy / f"{split}.json"
     rows: list[dict] = []
     kept = 0
+    seen: dict[str, int] = {}
     for thm in iter_leandojo_theorems(path):
         tactics = thm.get("traced_tactics") or []
+        name = thm["full_name"]
+        seen[name] = seen.get(name, 0) + 1  # counted before filtering, so ids do not depend on min_steps
         if len(tactics) < min_steps:
             continue
-        name = thm["full_name"]
+        pid = f"leandojo:{name}" if seen[name] == 1 else f"leandojo:{name}#{seen[name]}"
         for i, t in enumerate(tactics):
             rows.append(
                 {
-                    "proof_id": f"leandojo:{name}",
+                    "proof_id": pid,
                     "step": i,
                     "source": "leandojo",
                     "split": split,

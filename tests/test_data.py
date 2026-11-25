@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -95,3 +96,25 @@ def test_build_all_reports_missing(tmp_path, capsys):
     out = capsys.readouterr().out
     for name in ("leandojo", "workbook steps", "minif2f", "proofnet", "putnam"):
         assert f"skip {name}" in out
+
+
+def test_leandojo_repeated_full_names_get_unique_ids(tmp_path):
+    # the real benchmark has e.g. two theorems named `aux` in different files
+    def thm(name, file, n):
+        tac = [{"tactic": f"t{i}", "state_before": f"s{i}", "state_after": f"s{i + 1}"} for i in range(n)]
+        return {"full_name": name, "file_path": file, "traced_tactics": tac}
+
+    d = tmp_path / "random"
+    d.mkdir()
+    (d / "train.json").write_text(json.dumps([
+        thm("aux", "Mathlib/A.lean", 2), thm("other", "Mathlib/B.lean", 1), thm("aux", "Mathlib/C.lean", 3),
+    ]))
+    df = data.load_leandojo(tmp_path, split="train")
+    assert not df.duplicated(["proof_id", "step"]).any()
+    ids = df.groupby("proof_id")["file_path"].nunique()
+    assert (ids == 1).all()
+    assert set(df["proof_id"]) == {"leandojo:aux", "leandojo:other", "leandojo:aux#2"}
+    assert len(df[df["proof_id"] == "leandojo:aux#2"]) == 3
+    # ids do not change when min_steps drops a theorem
+    df2 = data.load_leandojo(tmp_path, split="train", min_steps=3)
+    assert set(df2["proof_id"]) == {"leandojo:aux#2"}
