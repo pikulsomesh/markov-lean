@@ -503,3 +503,41 @@ def test_cli_paper_takes_every_input_flag(tmp_path, paper_dir):
     assert cli.main(["paper", "--results", str(tmp_path / "none"), "--paper", str(paper_dir),
                      "--switches", str(run)]) == 0
     assert (paper_dir / "figures" / "table_switches.tex").exists()
+
+
+def _accuracy_run(d: Path) -> Path:
+    """A real `judge-accuracy` report on the committed gold set: haiku always right, sonnet always 26."""
+    from markov_lean import gold as G
+    from markov_lean import judge_accuracy as JA
+
+    gold = G.read_gold()
+    scored = gold[gold.status != "excluded"]
+    fam = G.family_codes(scored)
+    right = [m if isinstance(m, str) and m else sorted(f)[0] for m, f in zip(scored.msc, fam)]
+    labels = pd.DataFrame({"proof_id": list(scored.id) * 2, "step": -1,
+                           "judge": ["claude-haiku-5-5"] * len(scored) + ["claude-sonnet-5-5"] * len(scored),
+                           "msc": right + ["26"] * len(scored)})
+    rep = JA.report(labels, gold, n_boot=20)
+    JA.write(rep, d, figures=False)
+    return d
+
+
+def test_accuracy_fills_the_gold_macros(tmp_path, paper_dir):
+    run = _accuracy_run(tmp_path / "judge_accuracy")
+    assert P.discover(tmp_path).accuracy == run
+    P.run(tmp_path / "none", paper_dir, accuracy=run, verbose=False)
+    v = macros(paper_dir / "figures" / "results_macros.tex")
+    rep = json.loads((run / "judge_accuracy.json").read_text())
+    st = rep["gold"]["status"]
+    assert v["resGoldStrict"] == P.tex_int(st["strict"]) and v["resGoldFamily"] == P.tex_int(st["family"])
+    assert v["resGoldProblems"] == P.tex_int(st["strict"] + st["family"])
+    assert v["resGoldAccHaiku"] == "100.0" and v["resGoldFamAccHaiku"] == "100.0"
+    sonnet = rep["judges"]["claude-sonnet-5-5"]["strict"]["accuracy"]
+    assert v["resGoldAccSonnet"] == P.tex_num(100 * sonnet, 1)
+    assert v["resGoldAccSonnetLo"] != r"\tbd" and v["resGoldMajority"] != r"\tbd"
+
+
+def test_accuracy_missing_leaves_red_dashes(tmp_path, paper_dir):
+    P.run(tmp_path / "none", paper_dir, verbose=False)
+    v = macros(paper_dir / "figures" / "preview" / "results_macros.tex")
+    assert all(v[k] == r"\tbd" for k in ("resGoldProblems", "resGoldAccHaiku", "resGoldFamAccSonnet"))

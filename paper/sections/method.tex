@@ -27,7 +27,8 @@ We cluster the state vectors into $n$ microstates with mini-batch $k$-means,
 choosing $n \in \{100, 200, 400\}$ by the VAMP-2 score on held-out proofs.
 At lag $\lag$ we count transitions $C_{ij}(\lag)$ from microstate $i$ at step
 $t$ to $j$ at step $t+\lag$ with a sliding window within each proof, keep the
-largest strongly connected set, and estimate a reversible maximum-likelihood
+largest strongly connected set (a step in a dropped microstate takes the
+macrostate of the nearest kept center), and estimate a reversible maximum-likelihood
 transition matrix $\T(\lag)$ with deeptime \citep{hoffmann2022deeptime}.
 
 \subsection{Metastable areas}
@@ -45,8 +46,9 @@ The implied timescales
   t_i(\lag) = -\frac{\lag}{\ln |\lambda_i(\lag)|}
 \end{equation}
 are computed from the eigenvalues $\lambda_i$ of $\T(\lag)$. If the dynamics
-are Markovian at lag $\lag$, the slow $t_i$ stop changing as $\lag$ grows; we
-pick the smallest lag at which they do. The Chapman--Kolmogorov test then
+are Markovian at lag $\lag$, the slow $t_i$ stop changing as $\lag$ grows. The
+pilot picked the lag with this check, and the full fit fixes it at
+$\lag = \resLag$; we report whether the $t_i$ have stopped changing there. The Chapman--Kolmogorov test then
 checks that $\T(\lag)^k \approx \T(k\lag)$ on the macrostates
 \citep{prinz2011markov}. Error bars come from a bootstrap over proofs with a
 fixed seed. Because most traced proofs are short, we keep proofs with at
@@ -57,9 +59,11 @@ count.
 % Table `labels`.
 No Lean source carries area labels, so two LLM judges, Claude Haiku 5.5 and
 Claude Sonnet 5.5, independently assign a two-digit MSC 2020 code
-\citep{msc2020} to each of 1{,}000 sampled proofs and to each of their steps.
-We report Cohen's $\kappa$ between the judges and each judge's accuracy on
-statements whose MSC code is known, and score macrostates against the
+\citep{msc2020} to each of the \resNumProofs{} proofs and to each of their steps
+(an even sample of 48 steps for the few longer proofs).
+We report Cohen's $\kappa$ between the judges and each judge's accuracy on a
+gold set of \resGoldProblems{} miniF2F, PutnamBench and ProofNet problems whose
+MSC code is known from the benchmarks' own metadata, and score macrostates against the
 judges' consensus with normalized mutual information (NMI) and the adjusted
 Rand index. The baseline partition labels every step of a proof with the
 top-level Mathlib folder of its source file.

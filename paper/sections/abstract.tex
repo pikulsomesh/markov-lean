@@ -7,7 +7,7 @@ states, cluster them into microstates, fit a Markov state model with proof
 steps as the unit of time, and coarse-grain it into metastable sets with PCCA+.
 Against MSC 2020 labels from two LLM judges, the metastable sets reach an NMI
 of \resMacroNMI, compared with \resFolderNMI{} for a baseline that labels each proof
-by its Mathlib folder, and the slowest area-switching process relaxes over
+by its Mathlib folder, and the model's slowest process relaxes over
 about \resSlowestTimescale{} tactic steps. Used as a prior in best-first search with
-DeepSeek-Prover-V1.5, the area model changes the number of problems solved
+DeepSeek-Prover-V1.5-RL, the area model changes the number of problems solved
 under a fixed budget by \resSearchGainMiniF{} on miniF2F and \resSearchGainPutnam{} on PutnamBench.
