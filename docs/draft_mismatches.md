@@ -1,6 +1,6 @@
 # Where the draft disagrees with the repo or the data
 
-Checked on Nov 25, 2026 against `main` at 6bf66e9 and the real LeanDojo runs in the project folder
+Checked on Nov 25, 2026 against `main` (with PR 41 merged) and the real LeanDojo runs in the project folder
 (`results/real-labelfree`, `results/real-switches`). The paper prose is the author's to rewrite; each row
 gives a one-line suggestion only. Line numbers are in `paper/sections/`.
 
@@ -26,7 +26,7 @@ gives a one-line suggestion only. Line numbers are in `paper/sections/`.
 |---|---|---|---|
 | `method.tex:47-49` | the lag is "the smallest lag at which [the slow timescales] stop changing" | `configs/full.yaml` fixes `lag: 1`; on the real fit the implied-timescale convergence check fails (max change 0.56 from lag 1 to 2) | Say lag 1 is fixed, and report that the timescales have not converged at it. |
 | `method.tex:29-30` | keep the largest strongly connected set | `MSMConfig.disconnected = "nearest"`: steps in dropped microstates get the macrostate of the nearest kept centroid, so every step keeps a label | Add half a sentence on how dropped microstates are labelled. |
-| `method.tex:61-62`, `experiments.tex:15`, `experiments.tex:71`, `related.tex:54` | each judge's accuracy on statements whose MSC code is known; Lean Workbook "contributes goal states for judge validation" | `main` has no dataset of statements with known MSC codes and no command that scores a judge on Workbook; open PR 41 adds a gold set (`gold-set`) and `judge-accuracy` | Once PR 41 merges, name the gold set and its source here; until then these lines have nothing behind them. |
+| `method.tex:61-62`, `experiments.tex:15`, `experiments.tex:71`, `related.tex:54` | each judge's accuracy on statements whose MSC code is known; Lean Workbook "contributes goal states for judge validation" | since PR 41, `gold-set` builds the known-code set from miniF2F, PutnamBench and ProofNet metadata (strict, family and excluded rows) and `judge-accuracy` scores a judge on it; Workbook is not part of it, and no accuracy numbers exist until the judges run | Name the gold set's three sources and its strict vs family scoring, and drop Workbook from the judge-validation role. |
 | `abstract.tex:8-11`, `intro.tex:30`, `method.tex:58` | the comparison uses "two LLM judges" | still true for the reported comparison; a third local judge (`local-judge`, Qwen 2.5 7B through Ollama) now exists for agreement checks | Mention the local judge only if its agreement numbers go in the paper. |
 
 ## Claims the data does not support yet
