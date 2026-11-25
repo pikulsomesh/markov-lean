@@ -1,0 +1,72 @@
+# Search evaluation (src/markov_lean/search_eval.py). Run on the EC2 instance:
+#   markov-lean search-eval --config configs/search_eval.yaml --out results/search_eval --estimate
+# See docs/search_eval.md for the runbook and cost plans.
+
+base_config: configs/search.yaml   # prover and Lean settings; the sections below override it
+
+prover:
+  # One tactic rarely needs more than ~100 tokens, and generation is most of the GPU time:
+  # 128 instead of search.yaml's 256 roughly halves an expansion. A tactic cut off at 128
+  # tokens just fails in Lean.
+  max_tokens: 128
+
+budget:                     # identical for every problem, condition and seed
+  max_expansions: 64        # prover calls per problem
+  wall_time: 300            # seconds per problem, a safety stop
+  max_depth: 32
+
+seeds: [0]                  # sampling seed sent to vLLM; add seeds for pass@k over seeds
+subset_seed: 0              # fixes the problem order that --limit takes a prefix of
+workers: 3                  # parallel search processes sharing the one vLLM server
+
+# Saved Markov model (after PR #13), used by the area conditions and for per-area tables.
+msm_dir: results/pilot3/msm
+
+benchmarks:
+  minif2f:
+    path: data/raw/deepseek_benchmarks/minif2f.jsonl
+    format: jsonl
+    splits: [test]          # 244 problems
+  putnam:
+    path: data/raw/PutnamBench
+    format: putnam
+    glob: lean4/src/*.lean
+
+conditions:
+  # No prior: the LM's own ranking (softmax of tactic logprobs). The baseline.
+  lm:
+    factory: lm
+  # Area prior steering by the coarse transition matrix only, at three mixing weights.
+  area_l0.1:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.1, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  area_l0.3:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  area_l0.6:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.6, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  # Diversity bonus alone: favour areas the search has visited less (no transition target).
+  diversity:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: false, diversity_alpha: 0.5, escape_strength: 0.0}
+  # Stuck escape alone: push away from areas the search sits in without progress.
+  stuck_escape:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: false, diversity_alpha: 0.0, escape_strength: 2.0, window: 8, threshold: 1.0}
+  # Everything on.
+  full:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: true, diversity_alpha: 0.5, escape_strength: 2.0}
+  # Control: same mixing rule and weight, random scores in place of the area scores.
+  random_l0.3:
+    factory: markov_lean.search_eval:RandomPrior
+    kwargs: {lam: 0.3}
+
+cost:
+  hourly_usd: 0.8048        # g6.xlarge on-demand, us-east-1; check the price in your region
+  ebs_usd_per_hour: 0.0274  # 200 GB gp3
+  startup_hours: 0.4
+  sec_per_expansion: 6.0    # a guess; after a smoke run the estimate uses measured times
+  parallel_efficiency: 0.8
+  expected_fraction: {minif2f: 0.55, putnam: 0.95}
