@@ -95,7 +95,31 @@ def make_all(rng) -> list[tuple[str, object]]:
     picks = C.select(*C.synthetic_case_inputs(seed=0))
     out.append((C.FIGURE_NAME, C.case_strips(picks.steps, max_steps=picks.config.max_steps)))
 
+    # within-proof switching: judge areas and macrostates, each against its nulls
+    out.append(("switches", switches_preview(rng)))
+
     return [(name, stamp(fig)) for name, fig in out]
+
+
+def switches_preview(rng):
+    """`markov-lean switches` on sticky synthetic sequences, drawn with its own figure function."""
+    from markov_lean import switches as S
+
+    folders = ["Algebra", "Analysis", "Topology"]
+    results = {}
+    for i, (src, p_stay, eps) in enumerate((("judge", 0.82, 0.1), ("macrostate", 0.93, None))):
+        T = sticky_matrix(len(AREAS), p_stay, rng)
+        rows, folder = [], []
+        for pid in range(240):
+            a = rng.integers(len(AREAS))
+            for step in range(int(rng.integers(2, 40))):
+                rows.append((f"p{pid:03d}", step, AREAS[a]))
+                a = rng.choice(len(AREAS), p=T[a])
+        seq = S.Sequences(pd.DataFrame(rows, columns=["proof_id", "step", "area"]))
+        folder = np.array([folders[int(p[1:]) % len(folders)] for p in seq.proofs], dtype=object)
+        results[src] = S.analyse_source(seq, folder, list(S.NULLS), n_perm=199, n_boot=200, seed=i,
+                                        noise_rate=eps, min_proofs=30)
+    return S.draw(results, S.dwell_table(results))
 
 
 def write_tables(outdir) -> list[Path]:

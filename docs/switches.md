@@ -58,6 +58,11 @@ Every statistic and null is repeated by Mathlib folder (folders with at least `-
 | `table_switches.tex` | booktabs tabular: observed [95% CI] and each null's mean (two-sided p) |
 | `switches.pdf`, `.png` | statistics against nulls, dwell distribution, switch rate by length (needs the `figures` extra) |
 
-## Hooking into `markov-lean paper`
+## In the paper
 
-Not wired in yet. To add it, follow `_build_bridges` in `paper.py`: add a `switches` source (a `--switches` folder, or a `switches/` folder found under `--results`), copy `table_switches.tex` and `switches.pdf` into `paper/figures/`, and take macros from `switches.json["headline"][source]` (for example `has_switch`, `switch_rate`, `switch_rate_shuffle`, `p_switch_rate_shuffle`, `off_mode_noise`).
+`markov-lean paper` picks the run up as its `switches` input (`--switches <folder>`, else `<pilot>/switches`, `results/switches` or `<full>/switches`). It copies `table_switches.tex` into the switching table (`\resultstable{table_switches}`, `tab:switches`) and `switches.pdf` into its figure (`\maybefigure{switches}`, `fig:switches`), both in `paper/sections/experiments.tex`, and writes the `\resSwitch...` numbers from `switches.json["headline"]` (list in `docs/paper_build.md`). Until a run is in, the table shows red dashes and the figure the synthetic preview of `scripts/preview_figures.py`.
+
+```
+markov-lean paper --switches results/real-switches/train_main
+make -C paper
+```

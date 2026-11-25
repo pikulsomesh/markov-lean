@@ -699,15 +699,14 @@ def markdown(rep: dict, results: dict[str, dict]) -> str:
     return "\n".join(lines)
 
 
-def figure(results: dict[str, dict], dwell: pd.DataFrame, path_stem: Path) -> list[Path]:
-    """Statistics against nulls (top), dwell distribution and switch rate by length (bottom)."""
+def draw(results: dict[str, dict], dwell: pd.DataFrame):
+    """The figure as a matplotlib Figure: statistics against nulls (top), dwell and switch rate by length (bottom)."""
     import matplotlib
     import matplotlib.pyplot as plt
     import seaborn as sns
 
     from .figures import paper_rc
 
-    written = []
     with matplotlib.rc_context(paper_rc()):
         fig = plt.figure(figsize=(7.0, 4.4), layout="constrained")
         top, bottom = fig.subfigures(2, 1, height_ratios=[1, 1.05])
@@ -768,11 +767,24 @@ def figure(results: dict[str, dict], dwell: pd.DataFrame, path_stem: Path) -> li
         ax.set_ylabel("Switches per move")
         ax.set_title("Switch rate by length", fontsize="medium")
         sns.despine(ax=ax)
+    return fig
+
+
+def figure(results: dict[str, dict], dwell: pd.DataFrame, path_stem: Path) -> list[Path]:
+    """Write ``draw``'s figure to ``<path_stem>.pdf`` and ``.png``."""
+    import matplotlib
+    import matplotlib.pyplot as plt
+
+    from .figures import paper_rc
+
+    fig = draw(results, dwell)
+    written = []
+    with matplotlib.rc_context(paper_rc()):  # font families resolve when the figure is drawn
         for suffix in (".pdf", ".png"):
             p = path_stem.with_suffix(suffix)
             fig.savefig(p)
             written.append(p)
-        plt.close(fig)
+    plt.close(fig)
     return written
 
 

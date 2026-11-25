@@ -25,6 +25,7 @@ Every input is optional. A `--<name> PATH` flag picks a folder instead of search
 | `--robustness` | `markov-lean robustness` (`<pilot>/robustness`) | table 2: every grouping of `baselines.csv` (macrostates, Mathlib folder and namespace at 1 and 2 levels, k-means on goal states and on microstate centers, microstates, the judges' proof label, random) with NMI, AMI, ARI and their intervals, all on the same steps, and the row-shuffle and proof-swap nulls of `robustness.json`; the judge ceiling; its figures are copied as `robustness_<name>.pdf` |
 | `--significance` | `markov-lean significance` (`<pilot>/significance`) | table 2: the within-proof shuffle null, and the intervals of the macrostate and folder rows when there is no robustness run |
 | `--bridges` | `markov-lean bridges` (`results/bridges`) | `bridges.pdf`, copied as is |
+| `--switches` | `markov-lean switches` (`<pilot>/switches`, else `results/switches`, else `<full>/switches`; the pilot's comes first because it has judge labels as well as macrostates) | the switching table (`table_switches.tex`, copied, or rebuilt from `switches.json` when only that is there), `switches.pdf` (copied), and the `\resSwitch...` numbers from `switches.json["headline"]` |
 
 `area_flow` uses the judges' MSC codes once labels exist and the macrostates before that (`--flow-areas` fixes one). Flows count only steps `t` and `t + 1` of the same proof.
 
@@ -35,7 +36,7 @@ Everything goes to `paper/figures/`:
 | file | read by |
 |---|---|
 | `<figure>.pdf` | `\maybefigure{<figure>}` |
-| `table_data.tex`, `table_areas.tex`, `table_search.tex` | `\resultstable{<name>}` inside each table environment (the caption and label stay in the section file) |
+| `table_data.tex`, `table_areas.tex`, `table_search.tex`, `table_switches.tex` | `\resultstable{<name>}` inside each table environment (the caption and label stay in the section file) |
 | `results_macros.tex` | `paper/results.tex`, input by `main.tex` after `macros.tex` |
 | `bridges.pdf`, `robustness_<name>.pdf`, `search_<name>.tex` / `.pdf` | nothing yet; there for the text to pick up |
 
@@ -59,5 +60,11 @@ Each is a macro that prints a red dash until its run is in. The full list, with 
 | `\resFlowsShown`, `\resFlowCoverage` (%) | the flow figure's caption |
 | `\resSearchSeeds` | seeds per problem |
 | `\resSearchBase<B>`, `\resSearchArea<B>`, `\resSearchGain<B>` | pass@1 (%) with the LM prior, with the area prior, and the difference in points, for `<B>` = `MiniF`, `Putnam` (any other benchmark that runs gets its own, named from it) |
+
+| `\resSwitch<S>Proofs`, `\resSwitch<S>Has` (%), `\resSwitch<S>HasLo`, `\resSwitch<S>HasHi` | proofs with two or more labelled steps; share of them with at least one switch and its 95% interval, for `<S>` = `Judge` (judge MSC codes) or `Macro` (macrostates) |
+| `\resSwitch<S>Rate`, `\resSwitch<S>Dwell`, `\resSwitch<S>OffMode` (%) | switches per move, mean dwell in steps, share of steps off the proof's main area |
+| `\resSwitch<S>RateShuffle`, `\resSwitch<S>RateShuffleP` | switches per move under the within-proof shuffle, and the two-sided p |
+| `\resSwitch<S>HasMarkov` (%), `\resSwitch<S>HasMarkovP`, `\resSwitch<S>HasPooled` (%), `\resSwitch<S>HasPooledP` | share of proofs with a switch under the Markov and folder-pool nulls, and the p of the observed share |
+| `\resSwitch<S>OffModeNoise` (%), `\resSwitch<S>OffModeNoiseP` | share off the main area under the noise floor (judge labels, or any source run with `--noise-rate`) |
 
 Use a macro followed by `{}` when a word comes next (`\resSearchSeeds{} seeds`), so TeX keeps the space.
