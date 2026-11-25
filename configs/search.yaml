@@ -1,0 +1,33 @@
+# Best-first proof search (src/markov_lean/search). Run with:
+#   python -m markov_lean.search --config configs/search.yaml --benchmark <jsonl> --out <dir>
+
+prover:                       # DeepSeek-Prover-V1.5 behind vLLM (scripts/serve_prover.sh)
+  base_url: http://localhost:8000    # or pass --endpoint http://<ec2-ip>:8000
+  model: deepseek-ai/DeepSeek-Prover-V1.5-RL
+  n: 16                       # tactic samples per expansion (one request, n choices)
+  temperature: 1.0            # DeepSeek's own sampling settings (configs/sampling.py)
+  top_p: 0.95
+  max_tokens: 256             # one tactic, not a whole proof
+  mode: non_cot               # non_cot or cot (cot writes a comment before each tactic)
+  timeout: 120
+  retries: 3
+
+lean:
+  project_dir: lean           # the project scripts/setup_lean.sh pins
+  repl_dir: ~/repl            # leanprover-community/repl checkout built by setup_ec2.sh
+  # command: [lake, env, /home/ubuntu/repl/.lake/build/bin/repl]   # overrides repl_dir
+  timeout: 60                 # seconds per tactic; on timeout the REPL is restarted
+  startup_timeout: 900        # importing Mathlib on a cold disk is slow
+
+search:
+  max_expansions: 600         # prover calls per theorem
+  max_depth: 64
+  wall_time: 600              # seconds per theorem
+  dedupe_states: true
+
+prior:
+  factory: lm                 # softmax over LM logprobs
+  kwargs: {temperature: 1.0, length_norm: false}
+  # Area prior (workstream B), once a loader that builds it from MSM outputs exists:
+  # factory: some.module:build_area_prior
+  # kwargs: {lam: 0.3}
