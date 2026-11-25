@@ -168,12 +168,16 @@ def test_split_is_stratified_and_order_free():
     gold = G.read_gold()
     sp = G.eval_split(gold)
     assert set(sp) == {"dev", "test"}
-    strict = gold[gold.status == "strict"].assign(sp=sp)
+    seen = gold.id.isin(G.SEEN_BEFORE_SPLIT)
+    assert seen.sum() == len(G.SEEN_BEFORE_SPLIT) == 28
+    assert (sp[seen] == "dev").all()  # no statement read during prompt design is in test
+    strict = gold[gold.status == "strict"].assign(sp=sp, seen=seen)
     for c, g in strict.groupby("msc"):
-        n_dev = int((g.sp == "dev").sum())
-        assert n_dev == len(g) // 2, c
-        if len(g) >= 2:
-            assert 0 < n_dev < len(g), c
+        # before the seen rows move, each class splits floor(n/2) dev / rest test
+        n_dev_hash = int(((g.sp == "dev") & ~g.seen).sum()) + int(g.seen.sum())
+        assert n_dev_hash >= len(g) // 2, c
+    assert set(strict[strict.sp == "test"].msc) == set(strict.msc) - {"03"}
+    assert int((strict.sp == "test").sum()) == 261
     shuffled = gold.sample(frac=1, random_state=3)
     assert (G.eval_split(shuffled).loc[gold.index] == sp).all()
     assert not (G.eval_split(gold, seed=1) == sp).all()

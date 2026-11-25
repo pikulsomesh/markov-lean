@@ -428,6 +428,21 @@ DEFAULT_EVAL_SPLIT = ROOT / "data" / "gold" / "msc_gold_eval_split.csv"
 EVAL_SPLIT_SEED = 20261125
 EVAL_SPLITS = ("dev", "test")
 
+# Gold problems whose statements were read while the v2 judge prompt was being written, before
+# the split existed (the first four strict rows of classes 40, 05, 20, 03, 26, 60 and 12 in file
+# order). They always go to dev, so no test problem was seen during prompt design.
+SEEN_BEFORE_SPLIT: frozenset[str] = frozenset({
+    "proofnet:Herstein|exercise_2_1_21", "proofnet:Herstein|exercise_2_1_27", "proofnet:Herstein|exercise_2_2_5",
+    "proofnet:Herstein|exercise_2_3_17", "proofnet:Herstein|exercise_5_1_8", "proofnet:Herstein|exercise_5_2_20",
+    "proofnet:Herstein|exercise_5_3_10", "proofnet:Herstein|exercise_5_5_2", "proofnet:Rudin|exercise_3_1a",
+    "proofnet:Rudin|exercise_3_3", "proofnet:Rudin|exercise_3_6a", "proofnet:Rudin|exercise_3_8",
+    "proofnet:Rudin|exercise_5_15", "proofnet:Rudin|exercise_5_2", "proofnet:Rudin|exercise_5_4",
+    "proofnet:Rudin|exercise_5_6", "putnam:putnam_1962_b2", "putnam:putnam_1965_a4", "putnam:putnam_1965_a5",
+    "putnam:putnam_1965_b2", "putnam:putnam_1965_b5", "putnam:putnam_1968_b1", "putnam:putnam_1974_b6",
+    "putnam:putnam_1976_b3", "putnam:putnam_1989_b4", "putnam:putnam_2004_a1", "putnam:putnam_2013_b3",
+    "putnam:putnam_2022_a4",
+})
+
 
 def _split_key(seed: int, pid: str) -> str:
     return hashlib.sha256(f"{seed}:{pid}".encode()).hexdigest()
@@ -440,9 +455,11 @@ def eval_split(gold: pd.DataFrame, seed: int = EVAL_SPLIT_SEED) -> pd.Series:
     Problems are grouped by stratum (strict rows by their class, family rows by their
     rule, excluded rows together). Within a stratum they are ordered by
     ``sha256(f"{seed}:{id}")``; the first ``floor(n / 2)`` go to ``dev`` and the rest to
-    ``test``, so test gets the extra problem of an odd stratum and every class with two
-    or more problems is in both halves. The split depends only on the ids, the statuses
-    and the seed, not on row order. Returns a Series of "dev"/"test" indexed like ``gold``.
+    ``test``, so test gets the extra problem of an odd stratum. Then every problem in
+    ``SEEN_BEFORE_SPLIT`` is moved to dev, so test holds only problems nobody read while
+    designing a prompt (03 Logic keeps no strict test problem: all four were read). The
+    split depends only on the ids, the statuses and the seed, not on row order. Returns a
+    Series of "dev"/"test" indexed like ``gold``.
     """
     stratum = np.where(gold.status == "strict", "strict:" + gold.msc,
                        np.where(gold.status == "family", "family:" + gold.rule, "excluded"))
@@ -451,6 +468,7 @@ def eval_split(gold: pd.DataFrame, seed: int = EVAL_SPLIT_SEED) -> pd.Series:
         ids = gold.loc[idx.to_numpy(), "id"].astype(str)
         order = sorted(ids.index, key=lambda i: _split_key(seed, ids[i]))
         out.loc[order[: len(order) // 2]] = "dev"
+    out[gold.id.astype(str).isin(SEEN_BEFORE_SPLIT).to_numpy()] = "dev"
     return out
 
 

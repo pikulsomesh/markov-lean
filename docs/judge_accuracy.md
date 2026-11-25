@@ -115,8 +115,11 @@ A judge prompt designed while looking at gold problems would score well on those
 reason. So the gold set has a fixed dev/test split, `data/gold/msc_gold_eval_split.csv`
 (`markov-lean gold-set eval-split` rewrites it, and `tests/test_prompts.py` checks it). Within each stratum
 (each strict class, each family rule, the excluded rows) problems are ordered by
-`sha256("20261125:" + id)`; the first half (rounded down) is dev and the rest is test. It depends only on the
-ids, statuses and the seed, not on row order. Strict rows: 270 dev, 276 test; every class is in both halves.
+`sha256("20261125:" + id)`; the first half (rounded down) is dev and the rest is test. Then the 28 gold
+statements read while the v2 prompt was written, before the split existed (`gold.SEEN_BEFORE_SPLIT`), are moved
+to dev, so no test problem was seen during prompt design. It depends only on the ids, statuses and the seed,
+not on row order. Strict rows: 285 dev, 261 test, in 10 of the 11 classes (all four 03 Logic problems were
+read, so 03 has no test problem).
 
 Prompt work uses dev only, and any prompt designed that way is scored on test:
 `gold-set steps --eval-split test` writes only test problems, and `judge-accuracy --eval-split test` scores
@@ -132,7 +135,7 @@ source .venv/bin/activate
 pip install -e ".[dev,judge,search,figures]"
 
 markov-lean gold-set steps --strict-only --eval-split test --out results/gold/steps_test.parquet
-# v1 baseline on the same problems (reuses what the strict25 run already labelled)
+# v1 baseline on the same 261 problems (reuses what the strict25 run already labelled)
 markov-lean local-judge label --steps results/gold/steps_test.parquet --all --stratify-by none \
   --out results/gold/local/qwen2.5_7b-instruct
 # v2
