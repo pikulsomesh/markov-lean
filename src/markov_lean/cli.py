@@ -62,6 +62,12 @@ def cmd_project(args: argparse.Namespace) -> int:
                                  n_jobs=args.jobs)
 
 
+def _explore(rest: list[str]) -> int:
+    from markov_lean import explore
+
+    return explore.main(rest)
+
+
 def _search_eval(rest: list[str]) -> int:
     from markov_lean import search_eval
 
@@ -96,6 +102,7 @@ def _significance(rest: list[str]) -> int:
 PASSTHROUGH = {
     "cases": (_cases, "pick readable proofs that cross areas; write the case-study figure and table"),
     "search-eval": (_search_eval, "proof search on miniF2F/PutnamBench under prior conditions (EC2)"),
+    "explore": (_explore, "write a static HTML results explorer (one file, no server) from a results folder"),
     "search-report": (_search_report, "pass@k tables, paired tests and figures from search-eval runs"),
     "bridges": (_bridges, "tactics and lemmas at the steps where a proof switches area, with lift and CIs"),
     "significance": (_significance, "proof-level significance tests for gate 1 on a finished pilot run"),

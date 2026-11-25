@@ -22,3 +22,6 @@ paper/*.fls
 paper/*.log
 paper/*.out
 paper/sections/*.aux
+
+# results explorer output (markov-lean explore)
+site/
