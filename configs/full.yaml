@@ -2,7 +2,7 @@
 #   markov-lean full --out results/full
 # Rerun only the projection against the saved model (for example once the search has found proofs):
 #   markov-lean project --msm results/full/msm --out results/full/project \
-#       --dataset minif2f_search=results/search/minif2f/steps.parquet
+#       --dataset name=path/to/steps.parquet
 # No step makes an API call. Outputs are described in results/README.md.
 data:
   processed_dir: data/processed
@@ -50,7 +50,7 @@ project:
     - {name: putnam, path: data/processed/putnam_test.parquet}
     - {name: workbook, path: data/processed/workbook_train.parquet}
     - {name: workbook_statements, path: data/processed/workbook_statements_train.parquet}
-    # proofs found by markov_lean.search, when they exist (skipped otherwise): real benchmark trajectories
-    - {name: minif2f_search, path: results/search/minif2f/steps.parquet, min_steps: 2}
-    - {name: putnam_search, path: results/search/putnam/steps.parquet, min_steps: 2}
-    - {name: proofnet_search, path: results/search/proofnet/steps.parquet, min_steps: 2}
+    # proofs found by `markov-lean search-eval` (every condition and seed), when they exist: real benchmark
+    # trajectories. Skipped until the runs are synced to results/search_eval/.
+    - {name: minif2f_search, path: "results/search_eval/minif2f/*/*/steps.parquet", min_steps: 2}
+    - {name: putnam_search, path: "results/search_eval/putnam/*/*/steps.parquet", min_steps: 2}

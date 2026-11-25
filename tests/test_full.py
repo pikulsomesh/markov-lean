@@ -283,3 +283,20 @@ def test_cli_lists_full_and_project(capsys):
         cli.main(["--help"])
     out = capsys.readouterr().out
     assert "full" in out and "project" in out
+
+
+def test_glob_reads_every_search_run(tmp_path):
+    pytest.importorskip("pyarrow")
+    from markov_lean import full
+
+    found, _ = generate_steps(6, 31)
+    for cond in ("lm", "area_l0.3"):
+        d = tmp_path / "search_eval" / "minif2f" / cond / "seed0"
+        d.mkdir(parents=True)
+        found.to_parquet(d / "steps.parquet", index=False)
+    spec = {"name": "s", "path": str(tmp_path / "search_eval" / "minif2f" / "*" / "*" / "steps.parquet"),
+            "min_steps": 2}
+    df = full.load_dataset(spec)
+    assert df["proof_id"].nunique() == 12
+    assert df["proof_id"].str.startswith(("lm/seed0/", "area_l0.3/seed0/")).all()
+    assert full.load_dataset({**spec, "path": str(tmp_path / "none" / "*" / "steps.parquet")}) is None

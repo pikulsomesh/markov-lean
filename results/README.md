@@ -43,7 +43,7 @@ Statistics (a move is a pair of steps `t` and `t + lag` in the same proof):
 
 - **LeanDojo val and test**: held-out proofs with full trajectories, filtered like the fit (8+ steps); `leandojo_test_all` keeps every multi-step proof.
 - **`leandojo_train_short`**: the 2 to 7 step training proofs the fit left out.
-- **miniF2F, ProofNet, PutnamBench, Lean Workbook**: the processed files hold one goal state per theorem (`step = -1`), and Workbook's tactic file one step per problem, so these give **occupancy only** (`has_transitions = false`). Their transition statistics need proofs: the `*_search` entries read `results/search/<benchmark>/steps.parquet` from `markov_lean.search` when those runs exist, and `markov-lean project --dataset name=path` adds any other steps table.
+- **miniF2F, ProofNet, PutnamBench, Lean Workbook**: the processed files hold one goal state per theorem (`step = -1`), and Workbook's tactic file one step per problem, so these give **occupancy only** (`has_transitions = false`). Their transition statistics need proofs: the `*_search` entries read every `results/search_eval/<benchmark>/<condition>/seed<k>/steps.parquet` from `markov-lean search-eval` when those runs exist (ids are prefixed with `<condition>/seed<k>/`), and `markov-lean project --dataset name=path` adds any other steps table.
 
 ## `results/pilot*/` — `markov-lean pilot`
 

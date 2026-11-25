@@ -309,8 +309,40 @@ def model_from_result(res) -> pj.FittedModel:
                           res.lag, int(res.report["n_macrostates"]), res.report)
 
 
+def _glob_steps(pattern: str) -> pd.DataFrame | None:
+    """Concatenate every steps parquet matching ``pattern`` (small files, such as a search run's).
+
+    The same theorem appears once per condition and seed, so each ``proof_id``
+    is prefixed with its file's folder relative to the pattern's fixed part.
+    """
+    import glob as _g
+
+    base = _path(pattern.split("*", 1)[0].rsplit("/", 1)[0] or ".")
+    files = sorted(Path(f) for f in _g.glob(str(_path(pattern)), recursive=True))
+    if not files:
+        return None
+    parts = []
+    for f in files:
+        df = pd.read_parquet(f, columns=KEY + ["state_before"])
+        tag = str(f.parent.relative_to(base)) if f.parent.is_relative_to(base) else str(f.parent)
+        parts.append(df.assign(proof_id=tag + "/" + df["proof_id"].astype(str)))
+    return pd.concat(parts, ignore_index=True)
+
+
 def load_dataset(spec: dict) -> pd.DataFrame | None:
-    """A dataset's steps (only the columns projection needs), filtered by its length limits."""
+    """A dataset's steps (only the columns projection needs), filtered by its length limits.
+
+    ``path`` may hold a ``*`` pattern, which reads every matching file (see ``_glob_steps``).
+    """
+    if "*" in str(spec["path"]):
+        df = _glob_steps(str(spec["path"]))
+        if df is None:
+            return None
+        df["step"] = df["step"].astype("int64")
+        df = df.drop_duplicates(KEY)
+        keep = select_keys(df, int(spec.get("min_steps", 1)), spec.get("max_steps"), spec.get("max_proofs"),
+                           int(spec.get("seed", 0)))
+        return keep.merge(df, on=KEY, how="left")
     path = _path(spec["path"])
     if path is None or not path.exists():
         return None
