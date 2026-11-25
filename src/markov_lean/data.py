@@ -232,7 +232,17 @@ def load_jsonl_statements(path: Path, source: str) -> pd.DataFrame:
     return _dedupe_ids(_frame(rows))
 
 _DECL = re.compile(r"^(?:@\[[^\]]*\]\s*)?(?:private\s+|protected\s+)?(theorem|lemma)\s+([^\s(:{\[]+)", re.M)
-_END = re.compile(r":=\s*(?:by\b|sorry\b)?", re.M)
+
+# Brackets whose contents never end a statement: a ``:=`` inside them is a default value,
+# a named argument or a ``let`` inside a binder.
+_OPEN, _CLOSE = "([{⟨⦃⟦⟪⁅", ")]}⟩⦄⟧⟫⁆"
+# Term keywords that take their own ``:=`` (``let x := v; body``).
+_BINDING_KW = frozenset({"let", "have", "letI", "haveI"})
+_IDENT = re.compile(r"[^\W\d][\w'!?.]*")
+_NEXT_DECL = re.compile(
+    r"\n(?=(?:@\[|(?:private|protected|noncomputable|partial|unsafe)\s+)*"
+    r"(?:theorem|lemma|def|abbrev|example|instance|structure|inductive|class|namespace|section"
+    r"|end|open|variable)\b)")
 
 
 def _split_from_path(path: Path) -> str:
@@ -244,18 +254,99 @@ def _split_from_path(path: Path) -> str:
     return "test"
 
 
+def mask_comments(text: str) -> str:
+    """``text`` with every comment and string literal blanked out (newlines kept), so the
+    result has the same length and positions as ``text``. Handles ``--`` line comments and
+    nested ``/- ... -/`` block comments (doc comments included)."""
+    out = list(text)
+    i, n = 0, len(text)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, b):
+            if out[k] != "\n":
+                out[k] = " "
+
+    while i < n:
+        if text.startswith("--", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            blank(i, j)
+            i = j
+        elif text.startswith("/-", i):
+            depth, j = 1, i + 2
+            while j < n and depth:
+                if text.startswith("/-", j):
+                    depth, j = depth + 1, j + 2
+                elif text.startswith("-/", j):
+                    depth, j = depth - 1, j + 2
+                else:
+                    j += 1
+            blank(i, j)
+            i = j
+        elif text[i] == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            j = min(j + 1, n)
+            blank(i + 1, j - 1)
+            i = j
+        else:
+            i += 1
+    return "".join(out)
+
+
+def statement_end(masked: str, start: int) -> int:
+    """Index of the ``:=`` that closes the declaration starting at ``start``.
+
+    ``masked`` is the source with comments blanked (``mask_comments``). The closing ``:=``
+    is the first one outside brackets that does not belong to a ``let``/``have``/``letI``/
+    ``haveI`` in the statement itself. When there is none, the statement runs to the next
+    top-level declaration or to the end of the text.
+    """
+    depth = pending = 0
+    i, n = start, len(masked)
+    while i < n:
+        c = masked[i]
+        if c in _OPEN:
+            depth += 1
+        elif c in _CLOSE:
+            depth = max(0, depth - 1)
+        elif c == "«":
+            j = masked.find("»", i)
+            i = n if j < 0 else j + 1
+            continue
+        elif c == ":" and masked.startswith(":=", i):
+            if depth == 0:
+                if not pending:
+                    return i
+                pending -= 1
+            i += 2
+            continue
+        elif c == "\n" and _NEXT_DECL.match(masked, i):
+            return i
+        elif c == "_" or c.isalpha():
+            m = _IDENT.match(masked, i)
+            if m:
+                if depth == 0 and m.group(0) in _BINDING_KW:
+                    pending += 1
+                i = m.end()
+                continue
+        i += 1
+    return n
+
+
 def parse_lean_statements(text: str) -> list[tuple[str, str]]:
     """Return (name, statement) for each theorem/lemma in a Lean source file.
 
-    The statement runs from the declaration keyword to the first ``:=`` after it, which
-    is how these benchmarks write their (unproved) theorems. Doc comments are dropped.
+    The statement runs from the declaration keyword to the ``:=`` that closes it (see
+    ``statement_end``), so ``let``/``have`` bindings, defaults inside binders and comments
+    in the statement are kept whole. Declarations inside comments are ignored, and doc
+    comments before a declaration are not part of it.
     """
+    masked = mask_comments(text)
     out = []
-    for m in _DECL.finditer(text):
-        start = m.start()
-        end_m = _END.search(text, m.end())
-        stop = end_m.start() if end_m else len(text)
-        stmt = text[start:stop].strip()
+    for m in _DECL.finditer(masked):
+        stmt = text[m.start(): statement_end(masked, m.end())].strip()
         out.append((m.group(2), stmt))
     return out
 

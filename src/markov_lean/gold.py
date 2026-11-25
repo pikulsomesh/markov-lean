@@ -315,19 +315,17 @@ def _chapter(exercise: str) -> str:
     return m.group(1) if m else "?"
 
 
-_PUTNAM_END = re.compile(r":=\s*(?:by\s+)?sorry\s*$")
-
-
 def putnam_statement(text: str, name: str) -> str:
-    """The ``theorem <name> ... `` statement of a PutnamBench file, up to its closing
-    ``:= sorry``. Statements may hold ``let x := ...``, so this cuts at the last ``:=``
-    that is followed only by ``sorry``, not at the first ``:=``."""
-    m = re.search(r"^theorem\s+" + re.escape(name) + r"\b", text, re.M)
+    """The ``theorem <name> ...`` statement of a PutnamBench file, up to the ``:=`` that
+    closes it. Statements may hold ``let x := ...``; ``data.statement_end`` skips those, so
+    this uses the same parser as the data and search-eval loaders."""
+    from markov_lean.data import mask_comments, statement_end
+
+    masked = mask_comments(text)
+    m = re.search(r"^theorem\s+" + re.escape(name) + r"\b", masked, re.M)
     if not m:
         return ""
-    body = text[m.start():]
-    end = _PUTNAM_END.search(body)
-    return (body[:end.start()] if end else body).strip()
+    return text[m.start(): statement_end(masked, m.end())].strip()
 
 
 def load_putnam(putnam_dir: Path) -> pd.DataFrame:

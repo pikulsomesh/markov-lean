@@ -194,16 +194,21 @@ def _fill_solutions(preamble: str) -> str:
 def parse_putnam_file(text: str, stem: str) -> dict | None:
     """``{"name", "statement", "preamble", "informal"}`` for the theorem in a PutnamBench
     file, or None when it has none. ``preamble`` holds everything between the imports and
-    the theorem (opens, the solution abbrev with its answer filled in); ``statement`` ends
-    with ``:=``. Raises ValueError when a ``sorry`` is left in the preamble."""
-    from markov_lean.data import _DECL, _END
+    the theorem (opens, the solution abbrev with its answer filled in); ``statement`` is
+    the whole signature, ``let``/``have`` bindings and comments included, and ends with
+    ``:=``. Raises ValueError when a ``sorry`` is left in the preamble."""
+    from markov_lean.data import _DECL, mask_comments, statement_end
 
-    decls = [m for m in _DECL.finditer(text) if m.group(1) == "theorem"]
+    masked = mask_comments(text)
+    decls = [m for m in _DECL.finditer(masked) if m.group(1) == "theorem"]
     if not decls:
         return None
     m = next((d for d in decls if d.group(2) == stem), decls[0])
-    end = _END.search(text, m.end())
-    statement = text[m.start(): end.start() if end else len(text)].rstrip() + " :="
+    stop = statement_end(masked, m.end())
+    statement = text[m.start(): stop].rstrip()
+    # a statement whose last line ends in a ``--`` comment needs the ``:=`` on a new line
+    ends_in_comment = len(masked[m.start(): stop].rstrip()) < len(statement)
+    statement += "\n:=" if ends_in_comment else " :="
     before = text[: m.start()]
     informal = ""
     doc = _DOC_BEFORE.search(before)
