@@ -4,7 +4,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "== Python environment"
-if [ ! -d .venv ]; then python3 -m venv .venv; fi
+# Use the newest Python 3.10+ on the machine (macOS ships 3.9 as python3).
+PY="${PYTHON:-}"
+if [ -z "$PY" ]; then
+  for v in 3.13 3.12 3.11 3.10; do
+    if command -v "python$v" >/dev/null 2>&1; then PY="python$v"; break; fi
+  done
+fi
+PY="${PY:-python3}"
+if ! "$PY" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+  echo "Need Python 3.10 or newer; found $("$PY" --version). Try: brew install python@3.12" >&2
+  exit 1
+fi
+if [ -d .venv ] && ! .venv/bin/python -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
+  echo "Removing .venv built with an old Python"; rm -rf .venv
+fi
+if [ ! -d .venv ]; then "$PY" -m venv .venv; fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 pip install -q --upgrade pip
