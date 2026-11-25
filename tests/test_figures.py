@@ -258,3 +258,17 @@ def test_pdf_embeds_truetype_not_type3(plt, tmp_path):
     data = figures.save_pdf(fig, tmp_path / "its.pdf").read_bytes()
     assert b"/Type3" not in data
     assert b"/FontFile2" in data
+
+
+def test_saved_pdf_uses_the_paper_font_not_the_global_default(plt, tmp_path):
+    """Families resolve at draw time, so save_pdf must apply the paper fonts too."""
+    from matplotlib import font_manager
+
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    if not available & {"Arial", "Helvetica", "Liberation Sans", "Nimbus Sans"}:
+        pytest.skip("no sans-serif font from the paper stack is installed")
+    fig = figures.implied_timescales([1, 2, 3], [[5.0], [6.0], [6.5]])
+    out = figures.save_pdf(fig, tmp_path / "its.pdf")
+    raw = out.read_bytes()
+    assert b"DejaVuSans" not in raw.replace(b"DejaVuSans-", b"")  # text font, not math fallback
+    assert any(name.encode() in raw for name in ("Arial", "Helvetica", "LiberationSans", "NimbusSans"))

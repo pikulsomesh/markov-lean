@@ -375,22 +375,34 @@ def _check(passed, value, threshold, detail) -> dict:
 
 # ---------------------------------------------------------------- pipeline
 
-def run(steps: pd.DataFrame, config: MSMConfig | None = None) -> MSMResult:
-    """Full automatic pipeline on a ``steps`` table: assignments plus every check."""
+def run(steps: pd.DataFrame, config: MSMConfig | None = None, *,
+        features: np.ndarray | None = None, featurizer: Any = None) -> MSMResult:
+    """Full automatic pipeline on a ``steps`` table: assignments plus every check.
+
+    ``features`` skips stage 1: pass an ``(n_steps, d)`` array (a memmap works)
+    whose rows follow ``sort_steps`` order, and the ``featurizer`` that made
+    it so the saved model can place new goal states.  ``markov_lean.full``
+    uses this to featurize the full training set in streamed batches.
+    """
     cfg = config or MSMConfig()
     t0 = time.perf_counter()
     df = sort_steps(steps, cfg.time_col)
     codes = proof_codes(df)
     lens = np.bincount(codes)
     median_len = float(np.median(lens))
-    texts = df["state_before"].fillna("").astype(str).tolist()
 
     # 1. features
-    fkw = dict(cfg.featurizer_kwargs)
-    if cfg.featurizer == "tfidf_svd":
-        fkw.setdefault("seed", cfg.seed)
-    featurizer = make_featurizer(cfg.featurizer, **fkw)
-    X = featurizer.fit_transform(texts)
+    if features is None:
+        texts = df["state_before"].fillna("").astype(str).tolist()
+        fkw = dict(cfg.featurizer_kwargs)
+        if cfg.featurizer == "tfidf_svd":
+            fkw.setdefault("seed", cfg.seed)
+        featurizer = make_featurizer(cfg.featurizer, **fkw)
+        X = featurizer.fit_transform(texts)
+    else:
+        if len(features) != len(df):
+            raise ValueError(f"features has {len(features)} rows, steps has {len(df)}")
+        X = features
     t_feat = time.perf_counter()
 
     # 2-3. microstates

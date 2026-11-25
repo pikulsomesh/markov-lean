@@ -4,8 +4,16 @@
 \providecommand{\T}{}\renewcommand{\T}{\mathbf{T}}
 \newcommand{\msc}[1]{\textsc{msc}~#1}
 \newcommand{\state}{s}
-% Include a figure from figures/ if it has been rendered, else a labelled box.
+% Include a figure from figures/ if it has been rendered; else a synthetic
+% preview from figures/preview/ (scripts/preview_figures.py) with a red note;
+% else a labelled box.
 \newcommand{\maybefigure}[2]{%
   \IfFileExists{figures/#1.pdf}%
     {\includegraphics[width=#2]{figures/#1.pdf}}%
-    {\fbox{\parbox[c][0.45\linewidth][c]{#2}{\centering\small figures/#1.pdf\\not rendered yet}}}}
+    {\IfFileExists{figures/preview/#1.pdf}%
+      {\begin{minipage}[b]{#2}\centering
+        \includegraphics[width=\linewidth]{figures/preview/#1.pdf}\\[-1pt]
+        {\tiny\textcolor{red}{synthetic preview, not a result}}\end{minipage}}%
+      {\fbox{\parbox[c][0.45\linewidth][c]{#2}{\centering\scriptsize\texttt{\detokenize{#1}}\\not rendered yet}}}}}
+% Placeholder for a number that waits on a run.
+\newcommand{\tbd}{\textcolor{red}{--}}

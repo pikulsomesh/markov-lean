@@ -286,6 +286,30 @@ def test_wait_polls_until_ended():
     assert sleeps == [5, 5] and batches.retrieved == 3
 
 
+class _CountingBatches:
+    """Fake whose request counts change only on some polls."""
+
+    def __init__(self, script):
+        self.script = list(script)  # (status, processing, succeeded, errored)
+
+    def retrieve(self, batch_id):
+        status, proc, ok, err = self.script.pop(0)
+        counts = NS(processing=proc, succeeded=ok, errored=err, expired=0, canceled=0)
+        return NS(id=batch_id, processing_status=status, request_counts=counts)
+
+
+def test_wait_prints_only_changes_and_heartbeats():
+    script = [("in_progress", 10, 0, 0)] * 4 + [("in_progress", 6, 3, 1), ("ended", 0, 9, 1)]
+    lines = []
+    judge.wait(FakeClient(_CountingBatches(script)), ["b1"], 60, 1, sleep=lambda s: None,
+               echo=lines.append, heartbeat_minutes=3)
+    # first poll, heartbeat at minute 3, the change at minute 4, and the end at minute 5
+    assert len(lines) == 4
+    assert lines[0] == "[0 min] b1: in_progress, 10 processing, 0 succeeded, 0 errored, 0 expired, 0 canceled"
+    assert "6 processing, 3 succeeded, 1 errored" in lines[2]
+    assert lines[3].startswith("[5 min] b1: ended, 0 processing, 9 succeeded")
+
+
 # ----------------------------------------------------------------------------- agreement
 
 

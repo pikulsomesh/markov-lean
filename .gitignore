@@ -12,3 +12,13 @@ lean/.lake/
 *.key
 data/processed/
 *.egg-info/
+
+# LaTeX build output (paper/main.pdf itself is committed)
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.log
+paper/*.out
+paper/sections/*.aux

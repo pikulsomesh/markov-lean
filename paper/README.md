@@ -10,6 +10,8 @@ make          # main.pdf, with latexmk if installed, else pdflatex + bibtex
 make style    # says whether the ICML style or the article fallback will be used
 ```
 
+`main.pdf` is the latest build, committed so the draft can be read on GitHub. Rebuild and commit it when the text changes. It needs a TeX distribution with latexmk: MacTeX on the Mac, or `texlive-latex-extra`, `texlive-fonts-recommended` and `latexmk` on Debian/Ubuntu.
+
 `main.tex` follows the official ICML 2027 `example_paper.tex`. It falls back to the plain article class (natbib, `plainnat`) only if `icml2027.sty` is missing.
 
 **Style files:** the ICML 2027 author kit is in this folder: `icml2027.sty`, `icml2027.bst`, and the `algorithm.sty`, `algorithmic.sty` and `fancyhdr.sty` it ships with. Leave them as they are; ICML checks submissions against the official style. The kit's `example_paper.tex` and `example_paper.bib` aren't copied in, since `main.tex` already follows them.
@@ -30,10 +32,11 @@ make style    # says whether the ICML style or the article fallback will be used
 | path | what it holds |
 |---|---|
 | `main.tex` | preamble, title block, section order |
-| `macros.tex` | notation, `\todo{}`, and `\maybefigure{}` (draws a placeholder box until the PDF exists) |
+| `macros.tex` | notation, `\todo{}`, `\tbd` (a red dash for a number that waits on a run) and `\maybefigure{}` (uses `figures/<name>.pdf`, else the synthetic preview, else a placeholder box) |
 | `sections/*.tex` | one file per section: abstract, intro, related, method, experiments, search, discussion, appendix, statements |
 | `refs.bib` | references, each checked against a primary source (see the comment above each entry) |
 | `figures/` | rendered figure PDFs (written by the analysis, not by hand) |
+| `figures/preview/` | the same figures drawn from made-up numbers by `scripts/preview_figures.py`, for judging layout only |
 
 ## Figures
 
@@ -53,6 +56,12 @@ Figures use seaborn's `ticks` style at `paper` scale with a sans-serif font: Ari
 For `search_ablation`, pass one row per run when there are several seeds, and seaborn draws the mean with a 95% CI. Pass `err_col` only for errors you computed yourself, with one row per bar.
 
 Install the plotting extra (matplotlib and seaborn) with `pip install -e ".[figures]"`.
+
+### Synthetic preview
+
+Until the runs are in, `python scripts/preview_figures.py` draws every figure from made-up numbers into `figures/preview/`, so the PDF shows its final layout. These are not results: each one carries a small "synthetic preview" stamp, and the paper prints "synthetic preview, not a result" in red under it. A real figure saved to `figures/<name>.pdf` replaces the preview automatically. Delete `figures/preview/` before submitting, then rebuild and check the PDF has no red notes left.
+
+Tables hold red dashes (`\tbd`) wherever a number waits on a run.
 
 ## Citations
 
