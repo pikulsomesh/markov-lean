@@ -212,6 +212,8 @@ def test_run_min_switch_steps_and_figures(tmp_path):
     assert {"observed", "shuffle"} <= set(bl["series"]) and set(bl["statistic"]) == {"has_switch", "switch_rate",
                                                                                      "mean_dwell", "off_mode"}
     assert res["switches"]["train"]["premise"]["n_proofs"] <= 19
+    inputs = json.loads((sw_dir / "switches.json").read_text())["inputs"]
+    assert inputs == {"split": "train", "min_switch_steps": 6}  # what `markov-lean paper` puts in the caption
 
 
 def test_cli_passthrough(capsys):

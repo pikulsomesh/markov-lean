@@ -60,9 +60,12 @@ Every statistic and null is repeated by Mathlib folder (folders with at least `-
 
 ## In the paper
 
-`markov-lean paper` picks the run up as its `switches` input (`--switches <folder>`, else `<pilot>/switches`, `results/switches` or `<full>/switches`). It copies `table_switches.tex` into the switching table (`\resultstable{table_switches}`, `tab:switches`) and `switches.pdf` into its figure (`\maybefigure{switches}`, `fig:switches`), both in `paper/sections/experiments.tex`, and writes the `\resSwitch...` numbers from `switches.json["headline"]` (list in `docs/paper_build.md`). Until a run is in, the table shows red dashes and the figure the synthetic preview of `scripts/preview_figures.py`.
+`markov-lean paper` picks the run up as its `switches` input (`--switches <folder>`, else `<pilot>/switches`, `results/switches` or `<full>/switches`), and the premise-folder run of `markov-lean premise-labels` as its `premise` input (`--premise <folder>`, else `results/premise-switches/proofs_8plus/switches/train`, then `.../all_proofs/switches/train`). The switching table (`\resultstable{table_switches}`, `tab:switches`) gets one block of rows per source, in a fixed order: judge MSC (or the planted areas on a synthetic run), macrostates, then premise MSC (only the main `premise` source; the variants stay in the premise run's own report). Each block comes from its run's `switches.json`; a source with no run is a block of red dashes, so the table keeps its shape whatever has run. The figure (`\maybefigure{switches}`, `fig:switches`) is redrawn with every source that has a run when there is a premise run, and otherwise copied from the switches run. Both are in `paper/sections/experiments.tex`. The `\resSwitch...` numbers come from each run's `switches.json["headline"]` (list in `docs/paper_build.md`). Until any run is in, the table shows red dashes and the figure the synthetic preview of `scripts/preview_figures.py`.
+
+Premise rows measure what a step *uses* (the Mathlib folders of the lemmas it cites), not what it is *about*, and only about a third of steps get a label; the table caption says so, with `\resSwitchPremiseCoverage` and `\resSwitchPremiseMinSteps`.
 
 ```
-markov-lean paper --switches results/real-switches/train_main
+markov-lean paper --switches results/real-switches/train_main \
+    --premise results/premise-switches/proofs_8plus/switches/train
 make -C paper
 ```

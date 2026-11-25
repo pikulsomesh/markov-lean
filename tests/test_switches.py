@@ -269,3 +269,30 @@ def test_judge_labels_are_used_when_present(synthetic_run, tmp_path):
 def test_missing_inputs_raise(tmp_path):
     with pytest.raises(FileNotFoundError):
         sw.run(tmp_path, verbose=False)
+
+
+def test_table_rows_and_figure_with_two_sources():
+    """Sources whose length strata start at different bins keep the bins in order; every null is in the legend."""
+    pytest.importorskip("seaborn")
+    rng = np.random.default_rng(3)
+    short = _seq(_sticky(80, 3, 0.8, rng, 2, 12))   # strata from 2-3 up
+    long = _seq(_sticky(80, 3, 0.8, rng, 9, 40))    # strata from 8-15 up
+    none = np.full(80, None, object)
+    res = {"macrostate": sw.analyse_source(long, none, ["shuffle", "markov"], seed=0, n_perm=20, n_boot=20),
+           "premise": sw.analyse_source(short, none, ["shuffle", "noise"], noise_rate=0.1, seed=1, n_perm=20,
+                                        n_boot=20)}
+    tex = sw.table_tex(res)
+    assert "\n".join(sw.table_rows("premise", res["premise"], ["shuffle", "markov", "noise"])) in tex
+    fig = sw.draw(res, sw.dwell_table(res))
+    try:
+        axes = fig.axes
+        labels = {t.get_text() for ax in axes for t in ax.get_xticklabels()}
+        assert "Premise\nMSC" in labels
+        lengths = [t.get_text() for t in axes[-1].get_xticklabels()]
+        assert lengths == [x for x in ["2-3", "4-7", "8-15", "16-31", "32+"] if x in lengths]
+        legend = [t.get_text() for t in fig.subfigs[0].legends[0].get_texts()]
+        assert {"Shuffle", "Markov", "Noise floor", "Observed"} <= set(legend)
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(fig)

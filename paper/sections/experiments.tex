@@ -115,10 +115,16 @@ null.}
   chain fit per Mathlib folder and started at the proof's first area; the
   folder pool deals each folder's areas out to its proofs at random; the noise
   floor keeps each proof in its main area and moves each step to another
-  area with a probability set by the two judges' step agreement, so it
-  applies only to judge labels. Judge rows
-  cover \resSwitchJudgeProofs{} proofs and macrostate rows
-  \resSwitchMacroProofs{} proofs with at least two labelled steps.}
+  area with a probability set by the two judges' step agreement for judge
+  rows and by the mean share of a step's premises outside its main area for
+  premise rows; macrostate rows have no such rate. Premise rows label a step by the Mathlib folders
+  of the lemmas it cites, mapped to MSC classes: they measure what a step
+  uses, not what it is about. \resSwitchPremiseCoverage\% of LeanDojo steps
+  get such a label, and premise rows use train proofs with at least
+  \resSwitchPremiseMinSteps{} tactic steps. Judge rows
+  cover \resSwitchJudgeProofs{} proofs, macrostate rows
+  \resSwitchMacroProofs{} and premise rows \resSwitchPremiseProofs{}
+  proofs with at least two labelled steps.}
   \label{tab:switches}
   \centering\small
   \setlength{\tabcolsep}{4pt}

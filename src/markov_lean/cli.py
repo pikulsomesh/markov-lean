@@ -70,7 +70,7 @@ def _explore(rest: list[str]) -> int:
 
 # Input folders of `markov-lean paper` (paper.INPUTS, kept here so the parser needs no heavy import).
 PAPER_INPUTS = ("pilot", "synthetic", "full", "msm", "search", "robustness", "significance", "bridges", "switches",
-                "accuracy")
+                "premise", "accuracy")
 
 
 def cmd_paper(args: argparse.Namespace) -> int:

@@ -184,7 +184,8 @@ def test_every_input_fills_figures_tables_and_numbers(tmp_path, paper_dir):
     assert "Random scores" in lines[2]
     switches = (figs / "table_switches.tex").read_text()
     assert switches.startswith(P.HEADER) and "Judge MSC" in switches and "Macrostate" in switches
-    assert r"\tbd" not in switches
+    assert r"\tbd" not in _block(switches, "Judge MSC") + _block(switches, "Macrostate")
+    assert _block(switches, "Premise MSC") == "\n".join(P._switch_preview_rows("premise"))  # no premise run
 
 
 def test_discovery_prefers_labelled_pilot_and_full_model(tmp_path):
@@ -541,3 +542,114 @@ def test_accuracy_missing_leaves_red_dashes(tmp_path, paper_dir):
     P.run(tmp_path / "none", paper_dir, verbose=False)
     v = macros(paper_dir / "figures" / "preview" / "results_macros.tex")
     assert all(v[k] == r"\tbd" for k in ("resGoldProblems", "resGoldAccHaiku", "resGoldFamAccSonnet"))
+
+
+# --------------------------------------------------------------------------- premise-folder rows
+
+
+def _block(tex: str, label: str) -> str:
+    """The rows of one source in the switching table, from its label to the next rule."""
+    lines = tex.splitlines()
+    i = next(k for k, ln in enumerate(lines) if ln.strip().startswith(label + " &"))
+    j = next(k for k in range(i + 1, len(lines)) if "rule" in lines[k])
+    return "\n".join(lines[i:j])
+
+
+def _premise_run(root: Path, min_steps: int = 1) -> Path:
+    """A real `markov-lean premise-labels` output, as it lands under results/premise-switches."""
+    from markov_lean import premise_areas as pa
+    from test_premise_areas import synthetic_steps
+
+    steps, idx = synthetic_steps(n_proofs=40)
+    root.mkdir(parents=True, exist_ok=True)
+    steps.to_parquet(root / "steps.parquet")
+    idx.to_parquet(root / "idx.parquet")
+    out = root / "premise-switches" / ("proofs_8plus" if min_steps > 1 else "all_proofs")
+    pa.run([root / "steps.parquet"], out, index_paths=[root / "idx.parquet"], n_perm=10, n_boot=20,
+           min_switch_steps=min_steps, figures=False, verbose=False)
+    return out / "switches" / "train"
+
+
+def test_premise_discovery_prefers_long_proofs(tmp_path):
+    results = tmp_path / "results"
+    assert P.discover(results).premise is None
+    allp = _premise_run(results)
+    assert P.discover(results).premise == allp
+    long = _premise_run(results, min_steps=4)
+    assert P.discover(results).premise == long
+    assert P.discover(results, premise=allp).premise == allp
+
+
+def test_premise_rows_without_a_switches_run(tmp_path, paper_dir):
+    pytest.importorskip("seaborn")
+    results = tmp_path / "results"
+    run = _premise_run(results, min_steps=4)
+    items = {(i.kind, i.name): i for i in P.run(results, paper_dir, verbose=False)}
+    figs = paper_dir / "figures"
+    tex = (figs / "table_switches.tex").read_text()
+    assert items[("table", "table_switches")].status == "real"
+    # judge and macrostate rows wait on their run; the premise rows are real and match the run's own table
+    for src, label in (("judge", "Judge MSC"), ("macrostate", "Macrostate")):
+        assert _block(tex, label) == "\n".join(P._switch_preview_rows(src))
+    prem = _block(tex, "Premise MSC")
+    assert r"\tbd" not in prem
+    assert prem in (run / "table_switches.tex").read_text()
+    assert tex.count(r"\midrule") == 3 and "Premise (carried)" not in tex  # the main source only
+    # the figure is redrawn from the premise run, not the preview
+    assert items[("figure", "switches")].status == "real" and items[("figure", "switches")].note == "premise"
+    assert (figs / "switches.pdf").read_bytes()[:4] == b"%PDF"
+    v = macros(figs / "results_macros.tex")
+    head = json.loads((run / "switches.json").read_text())["headline"]["premise"]
+    assert v["resSwitchPremiseProofs"] == P.tex_int(head["n_proofs"])
+    assert v["resSwitchPremiseHas"] == f"{100 * head['has_switch']:.1f}"
+    assert v["resSwitchPremiseOffModeNoise"] == f"{100 * head['off_mode_noise']:.1f}"
+    cov = json.loads((run.parents[1] / "coverage.json").read_text())
+    share = next(e["share_labelled"] for e in cov["by_split"] if e["split"] == "all" and e["source"] == "premise")
+    assert v["resSwitchPremiseCoverage"] == f"{100 * share:.1f}"
+    assert v["resSwitchPremiseMinSteps"] == "4"
+    assert v["resSwitchJudgeHas"] == r"\tbd" and v["resSwitchMacroHas"] == r"\tbd"
+
+
+def test_premise_rows_join_the_pilot_run(tmp_path, paper_dir):
+    pytest.importorskip("seaborn")
+    results = make_results(tmp_path / "results", search=False)
+    _premise_run(results)
+    items = {(i.kind, i.name): i for i in P.run(results, paper_dir, verbose=False)}
+    tex = (paper_dir / "figures" / "table_switches.tex").read_text()
+    labels = [ln.split("&")[0].strip() for ln in tex.splitlines() if "Proofs with a switch" in ln]
+    assert labels == ["Judge MSC", "Macrostate", "Premise MSC"]
+    assert r"\tbd" not in tex
+    assert items[("figure", "switches")].note == "judge, macrostate, premise"
+    v = macros(paper_dir / "figures" / "results_macros.tex")
+    assert v["resSwitchJudgeProofs"] == "30" and v["resSwitchPremiseMinSteps"] == "1"
+    assert v["resSwitchPremiseHas"] != r"\tbd"
+
+
+def test_old_switches_run_keeps_its_own_table_and_figure(tmp_path, paper_dir):
+    """A switches run that kept only its table and figure cannot take premise rows; it is used as it was."""
+    results = tmp_path / "results"
+    _premise_run(results)
+    old = _switch_run(tmp_path / "real-switches" / "train_main")
+    items = {(i.kind, i.name): i for i in P.run(results, paper_dir, switches=old, verbose=False)}
+    figs = paper_dir / "figures"
+    assert "Macrostate" in (figs / "table_switches.tex").read_text()
+    assert (figs / "switches.pdf").read_bytes() == (old / "switches.pdf").read_bytes()
+    assert items[("figure", "switches")].note == "macrostate"
+    v = macros(figs / "results_macros.tex")
+    assert v["resSwitchMacroHas"] == "6.5" and v["resSwitchPremiseHas"] != r"\tbd"
+
+
+def test_premise_run_without_premise_source_is_a_warning(tmp_path, paper_dir):
+    bad = tmp_path / "results" / "premise-switches" / "all_proofs" / "switches" / "train"
+    bad.mkdir(parents=True)
+    (bad / "switches.json").write_text(json.dumps({"headline": {"premise_strict": {"n_proofs": 3}}, "sources": {}}))
+    b = P.build(P.discover(tmp_path / "results"))
+    assert "premise" in b.failures and "table_switches" in b.tables and not b.tables["table_switches"][2]
+    assert not any(k.startswith("resSwitchPremise") for k in b.macros)
+
+
+def test_switch_preview_has_three_sources():
+    tex = P.table_switches_preview_tex()
+    assert [ln.split("&")[0].strip() for ln in tex.splitlines() if "Proofs with a switch" in ln] == \
+        ["Judge MSC", "Macrostate", "Premise MSC"]
+    assert _block(tex, "Macrostate").count("--") == 4 and "--" not in _block(tex, "Premise MSC")
