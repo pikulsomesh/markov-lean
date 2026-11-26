@@ -18,6 +18,13 @@ No API key is used. The build and extraction run under the memory guard with its
 lock, so they wait for the overnight search to finish and yield to runner jobs. Rerun to
 resume; `--status` shows progress.
 
+Disk: it needs about 12 GB while it runs (the Lean 4.37 toolchain, about 3.3 GB if new;
+PFR's own Mathlib checkout and prebuilt files, about 6 to 7 GB; their compressed cache,
+about 2 GB) and stops before downloading anything unless 15 GB are free (`MIN_DISK_GB`).
+Once the steps are extracted and converted, stage 6 deletes PFR's build folder, the Mathlib
+cache files it downloaded (files that were already there, such as markov-lean's own, stay)
+and the toolchain if it installed it. `KEEP_PFR_BUILD=1` keeps them.
+
 Then, after checking the console balance:
 
 ```
