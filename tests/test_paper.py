@@ -746,3 +746,21 @@ def test_switch_preview_has_three_sources():
     assert [ln.split("&")[0].strip() for ln in tex.splitlines() if "Proofs with a switch" in ln] == \
         ["Judge MSC", "Macrostate", "Premise MSC"]
     assert _block(tex, "Macrostate").count("--") == 4 and "--" not in _block(tex, "Premise MSC")
+
+
+def test_mac_putnam_run_next_to_minif2f_fills_the_putnam_macros(tmp_path, paper_dir):
+    """scripts/mac_overnight.sh with BENCHMARK=putnam writes into the same results/mac_overnight: the
+    Putnam search macros go real and the miniF2F ones stay as they were."""
+    runs = tmp_path / "results"
+    _write_mac_search(runs / "mac_overnight")
+    _write_mac_search(tmp_path / "putnam_run", n=12)   # same shape, 12 problems, moved under putnam/
+    shutil.move(str(tmp_path / "putnam_run" / "minif2f"), str(runs / "mac_overnight" / "putnam"))
+    items = {(i.kind, i.name): i for i in P.run(runs, paper_dir, verbose=False)}
+    assert items[("figure", "search_ablation")].status == "real"
+    v = macros(paper_dir / "figures" / "results_macros.tex")
+    assert v["resSearchBaseMiniF"] == "40.0" and v["resSearchProblemsMiniF"] == "20"
+    assert v["resSearchGainMiniF"] == "$+0.0$~points" and v["resSearchStatementErrorsMiniF"] == "2"
+    assert v["resSearchBasePutnam"] == "66.7" and v["resSearchAreaPutnam"] == "66.7"
+    assert v["resSearchGainPutnam"] == "$+0.0$~points" and v["resSearchProblemsPutnam"] == "12"
+    assert v["resSearchRandomGainPutnam"] == "$-8.3$~points" and v["resSearchStatementErrorsPutnam"] == "2"
+    assert v["resSearchGainLoPutnam"] != r"\tbd" and v["resSearchGainHiPutnam"] != r"\tbd"

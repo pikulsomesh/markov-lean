@@ -23,13 +23,14 @@
 #   PLAN=full                    full (up to HOURS=48, ends when all problems are done) or night (HOURS=12)
 #   HOURS=                       stop after this many hours in all, pauses included
 #   CONDITIONS="lm area_l0.3 random_l0.3"   conditions from the config
-#   BENCHMARK=minif2f            or putnam (see docs/search_eval.md first)
+#   BENCHMARK=minif2f            or putnam (PutnamBench from scripts/fetch_gold_sources.sh; see
+#                                docs/search_eval.md). Both go under the same OUT, so the paper reads both
 #   LIMIT=                       first N problems of the fixed order (default: all)
 #   OUT=results/mac_overnight    where the runs, logs and report go
 #   MODEL=~/models/deepseek-prover-v1.5-rl_q4_k_m.gguf
 #   MSM_DIR=                     saved Markov model (default: msm_dir in the config)
 #   CONFIG=configs/search_eval_mac_overnight.yaml
-#   MIN_FREE_GB=1  RESUME_FREE_GB=10  MAX_SWAP_GROWTH_GB=1.5  COOLDOWN=120  POLL=10
+#   MIN_FREE_GB=1  RESUME_FREE_GB=4  MAX_SWAP_GROWTH_GB=1.5  COOLDOWN=120  POLL=10
 #   YIELD_TO_RUNNER=1            0 to ignore runner jobs (memory checks still apply)
 #
 # The prover runs in-process through llama.cpp. API and AWS credentials are removed from
@@ -53,7 +54,7 @@ MSM_DIR="${MSM_DIR:-}"
 CONFIG="${CONFIG:-configs/search_eval_mac_overnight.yaml}"
 PY="${PY:-.venv/bin/python}"
 MIN_FREE_GB="${MIN_FREE_GB:-1}"
-RESUME_FREE_GB="${RESUME_FREE_GB:-10}"
+RESUME_FREE_GB="${RESUME_FREE_GB:-4}"
 MAX_SWAP_GROWTH_GB="${MAX_SWAP_GROWTH_GB:-1.5}"
 COOLDOWN="${COOLDOWN:-120}"
 POLL="${POLL:-10}"
@@ -67,7 +68,7 @@ case "${1:-}" in
   --status) mode=status ;;
   --report) mode=report ;;
   --agent-plist) mode=plist ;;
-  -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
   *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
 esac
 
@@ -83,7 +84,8 @@ guard=(-m markov_lean.mac_guard --hours "$HOURS" --hours-flag=--max-hours --stat
        --min-free-gb "$MIN_FREE_GB" --resume-free-gb "$RESUME_FREE_GB"
        --max-swap-growth-gb "$MAX_SWAP_GROWTH_GB" --cooldown "$COOLDOWN" --poll "$POLL")
 [ "$YIELD_TO_RUNNER" = 1 ] || guard+=(--no-runner-yield)
-report=(-m markov_lean.search_report --runs "$OUT/$BENCHMARK" --out "$OUT/report" --no-figures)
+# The report covers every benchmark under OUT, so a Putnam run adds to the miniF2F report, not replaces it.
+report=(-m markov_lean.search_report --runs "$OUT" --out "$OUT/report" --no-figures)
 
 # No credentials reach the run. PYTHONUNBUFFERED keeps the progress lines live in the log.
 clean_env=(env -u ANTHROPIC_API_KEY -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY
@@ -164,7 +166,12 @@ case " $CONDITIONS " in
 esac
 bench_path=$("$PY" -c 'import sys, yaml; print(yaml.safe_load(open(sys.argv[1]))["benchmarks"][sys.argv[2]]["path"])' "$CONFIG" "$BENCHMARK") \
   || die "benchmark $BENCHMARK is not in $CONFIG"
-[ -e "$bench_path" ] || die "$bench_path not found: run .venv/bin/markov-lean fetch $BENCHMARK"
+if [ ! -e "$bench_path" ]; then
+  case "$bench_path" in
+    data/raw/gold/*) die "$bench_path not found: run scripts/fetch_gold_sources.sh (pinned, about 11 MB for PutnamBench)" ;;
+    *) die "$bench_path not found: run .venv/bin/markov-lean fetch $BENCHMARK" ;;
+  esac
+fi
 if [ "$mode" = run ]; then
   "$PY" -c 'import llama_cpp, sys; sys.exit(0 if llama_cpp.llama_supports_gpu_offload() else 3)' 2>/dev/null \
     || die "llama-cpp-python is missing or built without Metal (MAC_SMOKE.md step 1)"

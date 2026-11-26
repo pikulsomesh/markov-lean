@@ -43,8 +43,8 @@ benchmarks:
     path: data/raw/deepseek_benchmarks/minif2f.jsonl
     format: jsonl
     splits: [test]          # 244 problems
-  putnam:                   # optional: almost never solved at this budget, see the docs
-    path: data/raw/PutnamBench
+  putnam:                   # 672 problems; run a prefix with LIMIT (docs/search_eval.md, "PutnamBench on the Mac")
+    path: data/raw/gold/PutnamBench   # pinned copy from scripts/fetch_gold_sources.sh, same commit as the gold set
     format: putnam
     glob: lean4/src/*.lean
 

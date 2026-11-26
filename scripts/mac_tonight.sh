@@ -85,7 +85,7 @@ no_keys=(env -u ANTHROPIC_API_KEY -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY 
 guarded() {  # name hours -- command...: run under the memory guard, which yields to runner jobs
   local name=$1 hours=$2; shift 3
   local g=(-m markov_lean.mac_guard --hours "$hours" --state "$STATE/${name}_guard.json"
-           --min-free-gb "${MIN_FREE_GB:-1}" --resume-free-gb "${RESUME_FREE_GB:-10}"
+           --min-free-gb "${MIN_FREE_GB:-1}" --resume-free-gb "${RESUME_FREE_GB:-4}"
            --max-swap-growth-gb "${MAX_SWAP_GROWTH_GB:-1.5}" --cooldown "${COOLDOWN:-120}" --poll "${POLL:-10}")
   [ "${YIELD_TO_RUNNER:-1}" = 1 ] || g+=(--no-runner-yield)
   "${no_keys[@]}" "$PY" "${g[@]}" -- "$@"
@@ -139,9 +139,10 @@ stage2() {  # the REPL at the Lean version that lean/ uses
   git -C "$REPL_DIR" fetch --tags -q || stop "could not fetch the REPL's tags."
   git -C "$REPL_DIR" checkout -q "$v" || stop "the REPL has no tag $v."
   (cd "$REPL_DIR" && lake build) || stop "the REPL build failed (see above)."
-  say "checking the REPL with Mathlib: example : 2 + 2 = 4"
+  say "checking the REPL with Mathlib: import Mathlib, then example : 2 + 2 = 4 (the import takes a minute)"
   local out
-  out=$(printf '{"cmd": "example : 2 + 2 = 4 := by norm_num"}\n\n' \
+  # norm_num comes from Mathlib, so the command has to import it first (\\n is a JSON newline)
+  out=$(printf '{"cmd": "import Mathlib\\nexample : 2 + 2 = 4 := by norm_num"}\n\n' \
         | (cd "$LEAN_DIR" && lake env "$REPL_DIR/.lake/build/bin/repl") 2>&1) || true
   printf '%s\n' "$out" | tail -5
   if ! printf '%s' "$out" | grep -q '"env"' || printf '%s' "$out" | grep -q '"severity": *"error"'; then

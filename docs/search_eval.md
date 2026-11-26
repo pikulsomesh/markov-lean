@@ -207,9 +207,29 @@ know which plan you need. The `random_l0.3` comparison uses the same test with H
 
 Other conditions (`area_l0.1`, `area_l0.6`) are in the config: add them with
 `CONDITIONS="lm area_l0.3 random_l0.3 area_l0.6"` once the core comparison is done; finished
-problems are skipped. PutnamBench (`BENCHMARK=putnam`) is runnable but not worth it at this budget:
-nearly every problem fails and uses its full 180 s under every condition (9 minutes a problem),
-which gives almost no disagreeing problems and so no power.
+problems are skipped.
+
+### PutnamBench on the Mac
+
+`BENCHMARK=putnam` runs the same three conditions and budget on PutnamBench. It reads the pinned
+copy that `scripts/fetch_gold_sources.sh` puts in `data/raw/gold/PutnamBench` (672 problems, the
+commit the gold set uses; about 11 MB). Nearly every problem fails and uses its full 180 s under
+every condition, so a problem takes about 9 minutes and gives almost no disagreeing problems: the
+run shows whether the area prior changes anything on harder statements, not a powered test. Run a
+prefix of the fixed order with `LIMIT`:
+
+```bash
+scripts/fetch_gold_sources.sh           # skips what is already there
+BENCHMARK=putnam LIMIT=150 scripts/mac_overnight.sh --estimate
+BENCHMARK=putnam LIMIT=150 scripts/mac_overnight.sh
+```
+
+150 problems take about 23 hours plus pauses (`PLAN=full` stops after 48 h; rerun to go on). Keep
+the default `OUT=results/mac_overnight`: the runs go to `results/mac_overnight/putnam/`, next to
+miniF2F, `report/` then covers both benchmarks, and `markov-lean paper` fills the Putnam search
+macros from the same folder. PutnamBench at that commit targets Mathlib v4.33.1, so with an older
+Mathlib in `lean/` some statements fail to elaborate; they are counted as statement errors
+(`resSearchStatementErrorsPutnam`) and fail under every condition.
 
 These numbers are for this model and budget only. Pass rates from the Mac are not comparable with
 the vLLM runs on EC2 or with published numbers; `search-report` puts that warning at the top of
@@ -226,7 +246,7 @@ runs it under `markov_lean.mac_guard`, which gives that memory back on its own:
   `MAX_SWAP_GROWTH_GB` (1.5) since the search started. Stopping, not pausing, is what frees the
   memory. The problem in flight is lost and rerun; finished problems are kept.
 * it starts the search again once no runner job has run for `COOLDOWN` seconds (120), pressure is
-  normal and `RESUME_FREE_GB` (10) is available. Until then it waits and says why, in the log and in
+  normal and `RESUME_FREE_GB` (4) is available. Until then it waits and says why, in the log and in
   `--status`.
 * it gives up after 3 failed starts in a row (an error in the search itself), and stops after
   `HOURS` in all, pauses included.
