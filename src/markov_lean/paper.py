@@ -78,13 +78,52 @@ INPUTS = ("pilot", "synthetic", "full", "msm", "search", "robustness", "signific
 CONDITION_LABELS = {
     "lm": (r"LM only ($\lambda = 0$)", "LM only"),
     "full": (r"Area prior, all three terms ($\lambda = 0.3$)", "area prior"),
-    "area_l0.1": (r"\quad dynamics term only ($\lambda = 0.1$)", "dynamics, 0.1"),
-    "area_l0.3": (r"\quad dynamics term only ($\lambda = 0.3$)", "dynamics, 0.3"),
-    "area_l0.6": (r"\quad dynamics term only ($\lambda = 0.6$)", "dynamics, 0.6"),
+    "area_l0.1": (r"\quad dynamics term only ($\lambda = 0.1$)", r"area, $\lambda$ = 0.1"),
+    "area_l0.3": (r"\quad dynamics term only ($\lambda = 0.3$)", r"area, $\lambda$ = 0.3"),
+    "area_l0.6": (r"\quad dynamics term only ($\lambda = 0.6$)", r"area, $\lambda$ = 0.6"),
     "diversity": (r"\quad visit term only", "visit term"),
     "stuck_escape": (r"\quad stall term only", "stall term"),
-    "random_l0.3": (r"Random scores ($\lambda = 0.3$)", "random scores"),
+    "random_l0.3": (r"Random scores ($\lambda = 0.3$)", r"random, $\lambda$ = 0.3"),
 }
+# The `full` condition mixes at this weight (configs/search_eval.yaml), so its random control is random_l0.3.
+FULL_LAMBDA = 0.3
+_LAMBDA_COND = re.compile(r"(area|random)_l(\d+(?:\.\d+)?)")
+
+
+def _cond_lambda(cond: str) -> float | None:
+    if cond == "full":
+        return FULL_LAMBDA
+    m = _LAMBDA_COND.fullmatch(cond)
+    return float(m.group(2)) if m else None
+
+
+def area_condition(conds, requested: str = "auto") -> str | None:
+    """The search condition the paper reports as the area prior, or None if no run has one.
+
+    A named condition is used only if it ran. ``auto`` takes ``full`` (all three terms)
+    when it ran, else the dynamics-only ``area_l<lambda>`` closest to lambda = 0.3 (the
+    smaller on a tie), which is what the Mac runs (``configs/search_eval_mac_overnight.yaml``).
+    """
+    conds = list(conds)
+    if requested != "auto":
+        return requested if requested in conds else None
+    if "full" in conds:
+        return "full"
+    areas = [c for c in conds if c.startswith("area_") and _cond_lambda(c) is not None]
+    if not areas:
+        return None
+    return min(areas, key=lambda c: (abs(_cond_lambda(c) - FULL_LAMBDA), _cond_lambda(c)))
+
+
+def random_control(conds, area: str | None) -> str | None:
+    """The ``random_l<lambda>`` run at the area prior's mixing weight: same rule, random scores."""
+    lam = _cond_lambda(area) if area else None
+    if lam is None:
+        return None
+    return next((c for c in conds if c.startswith("random_") and _cond_lambda(c) is not None
+                 and abs(_cond_lambda(c) - lam) < 1e-9), None)
+
+
 BENCHMARK_LABELS = {"minif2f": "miniF2F", "proofnet": "ProofNet", "putnam": "PutnamBench"}
 # Benchmarks whose macros always exist, so the text can use them before any run.  ProofNet is not one
 # (the paper uses PutnamBench); a run on it still gets its macros, named from the benchmark.
@@ -129,10 +168,27 @@ MACROS: dict[str, str] = {
     "resFlowCoverage": "share of area changes those flows cover, in percent",
     "resSearchSeeds": "seeds per problem in the search runs",
 }
+MACROS["resSearchCondition"] = "search condition reported as the area prior (full, or area_l<lambda> on its own)"
+MACROS["resSearchExpansions"] = "search budget: prover calls (expansions) per problem"
+MACROS["resSearchWallTime"] = "search budget: wall time per problem, in seconds"
+
+
+def search_macro_names(bench: str, sfx: str) -> dict[str, str]:
+    return {
+        f"resSearchBase{sfx}": f"{bench}: problems solved (%) with the LM prior alone",
+        f"resSearchArea{sfx}": f"{bench}: problems solved (%) with the area prior",
+        f"resSearchGain{sfx}": f"{bench}: change in problems solved, area prior minus LM prior, in points",
+        f"resSearchGainLo{sfx}": f"{bench}: lower end of the paired 95% bootstrap interval of that change",
+        f"resSearchGainHi{sfx}": f"{bench}: upper end of that interval",
+        f"resSearchRandomGain{sfx}": f"{bench}: random scores at the same weight minus LM prior, in points",
+        f"resSearchProblems{sfx}": f"{bench}: problems in the search runs",
+        f"resSearchStatementErrors{sfx}": f"{bench}: problems whose statement fails to elaborate (unsolved in "
+                                          "every condition)",
+    }
+
+
 for _b, _m in BENCHMARK_MACROS.items():
-    MACROS[f"resSearchBase{_m}"] = f"{_b}: problems solved (%) with the LM prior alone"
-    MACROS[f"resSearchArea{_m}"] = f"{_b}: problems solved (%) with the area prior"
-    MACROS[f"resSearchGain{_m}"] = f"{_b}: change in problems solved, area prior minus LM prior, in points"
+    MACROS.update(search_macro_names(_b, _m))
 
 # `markov-lean switches`: area source in switches.json -> macro infix.  Judge and macrostate rows come from the
 # switches run; premise rows (`markov-lean premise-labels`, source `premise`) from the premise run.
@@ -986,6 +1042,12 @@ def _build_switches(src: Sources, b: Build) -> None:
         b.figure_files["switches"] = (main_fig, main["rel"], ", ".join(shown) if shown else "")
 
 
+def _search_budget(df: pd.DataFrame, col: str) -> str | None:
+    """The one budget every run used, or None when runs differ or do not say."""
+    v = pd.to_numeric(df[col], errors="coerce").dropna().unique() if col in df.columns else []
+    return tex_int(round(float(v[0]))) if len(v) == 1 else None
+
+
 def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, baseline: str,
                   n_boot: int) -> bool:
     if src.search is None:
@@ -999,41 +1061,79 @@ def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, 
     if df.empty:
         return False
     from . import figures as fg
+    from .search_report import _statement_error, paired_compare
 
     rel = _rel(src.search, src.results.parent)
+    conds = list(dict.fromkeys(df["condition"]))
+    area = area_condition(conds, main_condition)
+    control = random_control(conds, area)
     table = search_pass_table(df, n_boot=n_boot)
     b.tables["table_search"] = (table_search_tex(table), rel, bool(len(table)))
     if len(table):
         b.macros["resSearchSeeds"] = (str(int(table["n_seeds"].min())), rel)
+    if area is not None:
+        b.macros["resSearchCondition"] = (r"\texttt{" + tex_escape(area) + "}", rel)
+    for col, name in (("max_expansions", "resSearchExpansions"), ("wall_time", "resSearchWallTime")):
+        val = _search_budget(df, col)
+        if val is not None:
+            b.macros[name] = (val, rel)
+    paired = paired_compare(df, baseline=baseline, n_boot=n_boot, seed=0)
+    pair = paired.set_index(["benchmark", "condition"])
     t = table.set_index(["benchmark", "condition"])
     for bench in dict.fromkeys(table["benchmark"]):
         sfx = macro_suffix(bench)
+        for k, v in search_macro_names(bench, sfx).items():
+            b.macro_names.setdefault(k, v)  # a benchmark the text does not know yet
+        sub = df[df["benchmark"] == bench]
+        b.macros[f"resSearchProblems{sfx}"] = (tex_int(sub["proof_id"].nunique()), rel)
+        b.macros[f"resSearchStatementErrors{sfx}"] = (tex_int(sub.loc[_statement_error(sub), "proof_id"].nunique()),
+                                                      rel)
         base = t["pass@1"].get((bench, baseline), np.nan) if "pass@1" in t.columns else np.nan
-        area = t["pass@1"].get((bench, main_condition), np.nan) if "pass@1" in t.columns else np.nan
+        val = t["pass@1"].get((bench, area), np.nan) if area and "pass@1" in t.columns else np.nan
         if _finite(base):
             b.macros[f"resSearchBase{sfx}"] = (tex_num(100 * base, 1), rel)
-        if _finite(area):
-            b.macros[f"resSearchArea{sfx}"] = (tex_num(100 * area, 1), rel)
-        if _finite(base) and _finite(area):
-            b.macros[f"resSearchGain{sfx}"] = (tex_signed(100 * (area - base)), rel)
-        if f"resSearchGain{sfx}" not in b.macro_names:  # a benchmark the text does not know yet
-            b.macro_names[f"resSearchBase{sfx}"] = f"{bench}: problems solved (%) with the LM prior alone"
-            b.macro_names[f"resSearchArea{sfx}"] = f"{bench}: problems solved (%) with the area prior"
-            b.macro_names[f"resSearchGain{sfx}"] = f"{bench}: area prior minus LM prior, in points"
+        if _finite(val):
+            b.macros[f"resSearchArea{sfx}"] = (tex_num(100 * val, 1), rel)
+        if _finite(base) and _finite(val):
+            b.macros[f"resSearchGain{sfx}"] = (tex_signed(100 * (val - base)), rel)
+        if area and (bench, area) in pair.index:
+            r = pair.loc[(bench, area)]
+            if _finite(r["diff_lo"]) and _finite(r["diff_hi"]):
+                b.macros[f"resSearchGainLo{sfx}"] = (tex_signed(100 * r["diff_lo"], unit="").rstrip("~"), rel)
+                b.macros[f"resSearchGainHi{sfx}"] = (tex_signed(100 * r["diff_hi"], unit="").rstrip("~"), rel)
+        if control and (bench, control) in pair.index and _finite(pair.loc[(bench, control), "diff"]):
+            b.macros[f"resSearchRandomGain{sfx}"] = (tex_signed(100 * pair.loc[(bench, control), "diff"]), rel)
     if "putnam" not in data_rows and "putnam" in set(df["benchmark"]):
         data_rows["putnam"] = (tex_int(df.loc[df["benchmark"] == "putnam", "proof_id"].nunique()), "--")
 
-    per_seed = (df.groupby(["benchmark", "condition", "seed"], sort=False)["solved"].mean() * 100).reset_index()
-    conds = list(dict.fromkeys(per_seed["condition"]))
-    if main_condition not in conds:  # one bar says nothing: the figure waits for the area-prior run
-        b.withheld["search_ablation"] = f"no `{main_condition}` (area prior) run yet; the paper leaves the figure out"
+    if area is None:  # one bar says nothing: the figure waits for the area-prior run
+        want = "an area-prior condition (`full` or `area_l<lambda>`)" if main_condition == "auto" \
+            else f"`{main_condition}`"
+        b.withheld["search_ablation"] = f"no {want} run yet; the paper leaves the figure out"
         return True
-    order = ([baseline] if baseline in conds else []) + [c for c in conds if c != baseline]
-    per_seed["method"] = per_seed["condition"].map(lambda c: CONDITION_LABELS.get(c, (c, c))[1])
-    per_seed["benchmark"] = per_seed["benchmark"].map(lambda x: BENCHMARK_LABELS.get(x, x))
-    per_seed = per_seed.iloc[np.argsort(per_seed["condition"].map(order.index).to_numpy(), kind="stable")]
-    b.figures["search_ablation"] = (fg.search_ablation(per_seed, metric_col="solved", group_col="benchmark"), rel,
-                                    f"{len(conds)} conditions")
+    if baseline not in conds:
+        b.withheld["search_ablation"] = f"no `{baseline}` (LM prior) run to compare the area prior with"
+        return True
+    order = [baseline, area] + ([control] if control else [])
+    order += [c for c in CONDITION_LABELS if c in conds and c not in order]
+    order += [c for c in conds if c not in order]
+    label = {c: CONDITION_LABELS.get(c, (c, c))[1] for c in order}
+    if area != "full":  # the dynamics term alone stands in for the area prior: say which weight
+        label[area] = CONDITION_LABELS.get(area, (area, area))[1].replace("area,", "area prior,")
+    rates = table[table["condition"].isin(order)].copy()
+    for col in ("pass@1", "pass@1_lo", "pass@1_hi"):  # pass_table drops interval columns it could not fill
+        if col not in rates.columns:
+            rates[col] = np.nan
+    rates = rates.assign(method=rates["condition"].map(label), group=rates["benchmark"].map(
+        lambda x: BENCHMARK_LABELS.get(x, x)), rate=100 * rates["pass@1"], lo=100 * rates["pass@1_lo"],
+        hi=100 * rates["pass@1_hi"])
+    rates = rates.iloc[np.argsort(rates["condition"].map(order.index).to_numpy(), kind="stable")]
+    diffs = paired[paired["condition"].isin(order)].copy()
+    diffs = diffs.assign(method=diffs["condition"].map(label), group=diffs["benchmark"].map(
+        lambda x: BENCHMARK_LABELS.get(x, x)), diff=100 * diffs["diff"], lo=100 * diffs["diff_lo"],
+        hi=100 * diffs["diff_hi"])
+    fig = fg.search_paired(rates, diffs, baseline=label[baseline], group_col="group")
+    b.figures["search_ablation"] = (fig, rel, f"{len(order)} conditions, area prior `{area}`")
     return True
 
 
@@ -1069,7 +1169,7 @@ def _build_accuracy(src: Sources, b: Build) -> None:
             b.macros.setdefault("resGoldMajority", (switch_macro_value(st["majority_baseline_accuracy"], "pct"), rel))
 
 
-def build(src: Sources, *, main_condition: str = "full", baseline: str = "lm", flow_areas: str = "auto",
+def build(src: Sources, *, main_condition: str = "auto", baseline: str = "lm", flow_areas: str = "auto",
           n_boot: int = 200, strict: bool = False) -> Build:
     """Make every figure, table and number the inputs allow, without writing anything."""
     b = Build()
@@ -1232,7 +1332,7 @@ def format_status(items: list[Item], failures: dict[str, str] | None = None) -> 
 
 
 def run(results: str | Path, paper: str | Path, *, dry_run: bool = False, redraw_previews: bool = False,
-        main_condition: str = "full", baseline: str = "lm", flow_areas: str = "auto", strict: bool = False,
+        main_condition: str = "auto", baseline: str = "lm", flow_areas: str = "auto", strict: bool = False,
         verbose: bool = True, **override) -> list[Item]:
     say = print if verbose else (lambda *a, **k: None)
     results, paper = Path(results), Path(paper)
@@ -1268,7 +1368,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--paper", default=str(ROOT / "paper"), help="paper folder (figures go to <paper>/figures)")
     for name in INPUTS:
         p.add_argument(f"--{name}", default=None, help=f"use this {name} folder instead of searching --results")
-    p.add_argument("--main-condition", default="full", help="search condition reported as the area prior")
+    p.add_argument("--main-condition", default="auto",
+                   help="search condition reported as the area prior (auto: full, else area_l<lambda> near 0.3)")
     p.add_argument("--baseline", default="lm", help="search condition reported as the LM prior alone")
     p.add_argument("--flow-areas", choices=["auto", "judge", "macrostate"], default="auto",
                    help="areas in the flow figure: judge MSC codes when labelled (auto), or macrostates")

@@ -65,9 +65,13 @@ chosen (validation split only).}
 \begin{figure}[t]
   \centering
   \maybefigure{search_ablation}{\columnwidth}
+  % TODO(Somesh): rewrite in your words. Drawn by `markov-lean paper`: left, share solved;
+  % right, paired change from LM only with the counts solved only by that prior / only by LM.
   \caption{Problems solved under the same budget with the language-model
-  prior alone and with the area prior. Error bars are 95\% bootstrap
-  intervals over problems.}
+  prior alone and with the area prior (left), and the paired change from the
+  LM prior (right; $+a\,{-b}$: solved only with that prior, only with the LM
+  prior). Error bars are 95\% bootstrap intervals over problems. Small local
+  budget: \resSearchExpansions{} expansions, \resSearchWallTime{}~s per problem.}
   \label{fig:search}
 \end{figure}}{}
 

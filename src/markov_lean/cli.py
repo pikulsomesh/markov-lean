@@ -247,7 +247,8 @@ def main(argv: list[str] | None = None) -> int:
     pa.add_argument("--paper", default=str(ROOT / "paper"), help="paper folder (outputs go to <paper>/figures)")
     for name in PAPER_INPUTS:
         pa.add_argument(f"--{name}", default=None, help=f"use this {name} folder instead of searching --results")
-    pa.add_argument("--main-condition", default="full", help="search condition reported as the area prior")
+    pa.add_argument("--main-condition", default="auto",
+                    help="search condition reported as the area prior (auto: full, else area_l<lambda> near 0.3)")
     pa.add_argument("--baseline", default="lm", help="search condition reported as the LM prior alone")
     pa.add_argument("--flow-areas", choices=["auto", "judge", "macrostate"], default="auto",
                     help="areas in the flow figure: judge MSC codes once labelled (auto), or macrostates")

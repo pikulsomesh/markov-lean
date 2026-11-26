@@ -36,12 +36,25 @@
 \newcommand{\resFlowsShown}{\tbd}  % number of flows drawn in the area-flow figure
 \newcommand{\resFlowCoverage}{\tbd}  % share of area changes those flows cover, in percent
 \newcommand{\resSearchSeeds}{\tbd}  % seeds per problem in the search runs
+\newcommand{\resSearchCondition}{\tbd}  % search condition reported as the area prior (full, or area_l<lambda> on its own)
+\newcommand{\resSearchExpansions}{\tbd}  % search budget: prover calls (expansions) per problem
+\newcommand{\resSearchWallTime}{\tbd}  % search budget: wall time per problem, in seconds
 \newcommand{\resSearchBaseMiniF}{\tbd}  % minif2f: problems solved (%) with the LM prior alone
 \newcommand{\resSearchAreaMiniF}{\tbd}  % minif2f: problems solved (%) with the area prior
 \newcommand{\resSearchGainMiniF}{\tbd}  % minif2f: change in problems solved, area prior minus LM prior, in points
+\newcommand{\resSearchGainLoMiniF}{\tbd}  % minif2f: lower end of the paired 95% bootstrap interval of that change
+\newcommand{\resSearchGainHiMiniF}{\tbd}  % minif2f: upper end of that interval
+\newcommand{\resSearchRandomGainMiniF}{\tbd}  % minif2f: random scores at the same weight minus LM prior, in points
+\newcommand{\resSearchProblemsMiniF}{\tbd}  % minif2f: problems in the search runs
+\newcommand{\resSearchStatementErrorsMiniF}{\tbd}  % minif2f: problems whose statement fails to elaborate (unsolved in every condition)
 \newcommand{\resSearchBasePutnam}{\tbd}  % putnam: problems solved (%) with the LM prior alone
 \newcommand{\resSearchAreaPutnam}{\tbd}  % putnam: problems solved (%) with the area prior
 \newcommand{\resSearchGainPutnam}{\tbd}  % putnam: change in problems solved, area prior minus LM prior, in points
+\newcommand{\resSearchGainLoPutnam}{\tbd}  % putnam: lower end of the paired 95% bootstrap interval of that change
+\newcommand{\resSearchGainHiPutnam}{\tbd}  % putnam: upper end of that interval
+\newcommand{\resSearchRandomGainPutnam}{\tbd}  % putnam: random scores at the same weight minus LM prior, in points
+\newcommand{\resSearchProblemsPutnam}{\tbd}  % putnam: problems in the search runs
+\newcommand{\resSearchStatementErrorsPutnam}{\tbd}  % putnam: problems whose statement fails to elaborate (unsolved in every condition)
 \newcommand{\resSwitchJudgeProofs}{\tbd}  % switches, judge: proofs with at least two area-labelled steps
 \newcommand{\resSwitchJudgeHas}{\tbd}  % switches, judge: proofs with at least one switch, in percent
 \newcommand{\resSwitchJudgeHasLo}{\tbd}  % switches, judge: lower end of its 95% bootstrap interval over proofs, in percent
