@@ -182,8 +182,14 @@ def search_macro_names(bench: str, sfx: str) -> dict[str, str]:
         f"resSearchGainHi{sfx}": f"{bench}: upper end of that interval",
         f"resSearchRandomGain{sfx}": f"{bench}: random scores at the same weight minus LM prior, in points",
         f"resSearchProblems{sfx}": f"{bench}: problems in the search runs",
-        f"resSearchStatementErrors{sfx}": f"{bench}: problems whose statement fails to elaborate (unsolved in "
-                                          "every condition)",
+        f"resSearchStatementErrors{sfx}": f"{bench}: problems with a statement error in every condition they ran "
+                                          "(the statement itself fails)",
+        f"resSearchStatementErrorsSome{sfx}": f"{bench}: problems with a statement error in some conditions but "
+                                              "not all (a Lean timeout or REPL restart at the statement)",
+        f"resSearchGainElab{sfx}": f"{bench}: area prior minus LM prior, in points, on the problems with no "
+                                   "statement error under either",
+        f"resSearchGainElabLo{sfx}": f"{bench}: lower end of the paired 95% bootstrap interval of that change",
+        f"resSearchGainElabHi{sfx}": f"{bench}: upper end of that interval",
     }
 
 
@@ -1048,6 +1054,21 @@ def _search_budget(df: pd.DataFrame, col: str) -> str | None:
     return tex_int(round(float(v[0]))) if len(v) == 1 else None
 
 
+def _statement_error_split(sub: pd.DataFrame) -> tuple[list[str], list[str]]:
+    """Problems of one benchmark with a statement error in every condition they ran, and in some but not all.
+
+    A ``statement error`` is any failure to set up the theorem: the statement not elaborating, but also a
+    Lean timeout or a REPL restart at that moment, which can hit one condition and not another.
+    """
+    from .search_report import _statement_error
+
+    se = sub.assign(_se=_statement_error(sub)).groupby(["proof_id", "condition"], sort=False)["_se"].any()
+    by_problem = se.groupby(level="proof_id", sort=False).agg(["all", "any"])
+    every = by_problem.index[by_problem["all"]].tolist()
+    some = by_problem.index[by_problem["any"] & ~by_problem["all"]].tolist()
+    return every, some
+
+
 def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, baseline: str,
                   n_boot: int) -> bool:
     if src.search is None:
@@ -1086,8 +1107,9 @@ def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, 
             b.macro_names.setdefault(k, v)  # a benchmark the text does not know yet
         sub = df[df["benchmark"] == bench]
         b.macros[f"resSearchProblems{sfx}"] = (tex_int(sub["proof_id"].nunique()), rel)
-        b.macros[f"resSearchStatementErrors{sfx}"] = (tex_int(sub.loc[_statement_error(sub), "proof_id"].nunique()),
-                                                      rel)
+        every, some = _statement_error_split(sub)
+        b.macros[f"resSearchStatementErrors{sfx}"] = (tex_int(len(every)), rel)
+        b.macros[f"resSearchStatementErrorsSome{sfx}"] = (tex_int(len(some)), rel)
         base = t["pass@1"].get((bench, baseline), np.nan) if "pass@1" in t.columns else np.nan
         val = t["pass@1"].get((bench, area), np.nan) if area and "pass@1" in t.columns else np.nan
         if _finite(base):
@@ -1101,6 +1123,16 @@ def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, 
             if _finite(r["diff_lo"]) and _finite(r["diff_hi"]):
                 b.macros[f"resSearchGainLo{sfx}"] = (tex_signed(100 * r["diff_lo"], unit="").rstrip("~"), rel)
                 b.macros[f"resSearchGainHi{sfx}"] = (tex_signed(100 * r["diff_hi"], unit="").rstrip("~"), rel)
+        if area and {baseline, area} <= set(sub["condition"]):
+            two = sub[sub["condition"].isin([baseline, area])]
+            bad = set(two.loc[_statement_error(two), "proof_id"])
+            clean = paired_compare(two[~two["proof_id"].isin(bad)], baseline=baseline, n_boot=n_boot, seed=0)
+            if len(clean) and _finite(clean["diff"].iloc[0]):
+                r = clean.iloc[0]
+                b.macros[f"resSearchGainElab{sfx}"] = (tex_signed(100 * r["diff"]), rel)
+                if _finite(r["diff_lo"]) and _finite(r["diff_hi"]):
+                    b.macros[f"resSearchGainElabLo{sfx}"] = (tex_signed(100 * r["diff_lo"], unit="").rstrip("~"), rel)
+                    b.macros[f"resSearchGainElabHi{sfx}"] = (tex_signed(100 * r["diff_hi"], unit="").rstrip("~"), rel)
         if control and (bench, control) in pair.index and _finite(pair.loc[(bench, control), "diff"]):
             b.macros[f"resSearchRandomGain{sfx}"] = (tex_signed(100 * pair.loc[(bench, control), "diff"]), rel)
     if "putnam" not in data_rows and "putnam" in set(df["benchmark"]):
