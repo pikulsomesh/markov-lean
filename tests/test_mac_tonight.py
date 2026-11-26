@@ -34,7 +34,7 @@ esac
     "bin/lake": LOG + FAIL + """
 case "$1" in
   build) mkdir -p .lake/build/bin ;;
-  env) cat >/dev/null; echo "${FAKE_REPL_REPLY:-{\\"env\\": 0\\}}" ;;
+  env) cat > "${REPL_IN:-/dev/null}"; echo "${FAKE_REPL_REPLY:-{\\"env\\": 0\\}}" ;;
 esac
 """,
     "bin/curl": LOG + FAIL + """
@@ -195,6 +195,25 @@ def test_repl_check_with_an_error_stops(mac):
     assert res.returncode == 1 and "REPL check" in (res.stdout + res.stderr)
     res, _ = run("--only", "4", FAKE_LEAN_OK="False")
     assert res.returncode == 1 and "lean ok: True" in (res.stdout + res.stderr)
+
+
+def test_repl_check_imports_mathlib_first(mac, tmp_path):
+    """norm_num is a Mathlib tactic: without the import the check fails on every Mac."""
+    import json
+
+    _, _, run = mac
+    run("--only", "1")
+    sent = tmp_path / "repl_in.txt"
+    res, _ = run("--only", "2", REPL_IN=str(sent))
+    assert res.returncode == 0, res.stdout + res.stderr
+    cmd = json.loads(sent.read_text().splitlines()[0])["cmd"]
+    assert cmd.splitlines()[0] == "import Mathlib"
+    assert cmd.splitlines()[-1] == "example : 2 + 2 = 4 := by norm_num"
+
+
+def test_guarded_stages_resume_at_4_gb_by_default():
+    text = SCRIPT.read_text()
+    assert '--resume-free-gb "${RESUME_FREE_GB:-4}"' in text and "RESUME_FREE_GB:-10" not in text
 
 
 def test_the_api_submit_needs_a_typed_yes_and_never_repeats(mac):

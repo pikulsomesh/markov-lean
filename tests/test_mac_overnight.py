@@ -78,16 +78,43 @@ def test_overnight_config_is_local_and_sized_for_the_mac():
     assert cfg.benchmarks["minif2f"]["splits"] == ["test"]
 
 
+def test_overnight_putnam_reads_the_pinned_gold_copy():
+    """BENCHMARK=putnam uses the PutnamBench checkout scripts/fetch_gold_sources.sh pins, so the Mac
+    needs no second clone and the run uses the same commit as the gold set."""
+    spec = yaml.safe_load(CONFIG.read_text())["benchmarks"]["putnam"]
+    assert spec["format"] == "putnam" and spec["glob"] == "lean4/src/*.lean"
+    fetch = (ROOT / "scripts" / "fetch_gold_sources.sh").read_text()
+    assert "RAW=data/raw/gold" in fetch and "clone_at PutnamBench" in fetch
+    assert spec["path"] == "data/raw/gold/PutnamBench"
+    for name in ("search_eval", "search_eval_mac_overnight"):   # the same budget both ways
+        assert yaml.safe_load((ROOT / "configs" / f"{name}.yaml").read_text())["benchmarks"]["putnam"]["format"] == "putnam"
+
+
+@pytest.mark.skipif((ROOT / "data" / "raw" / "gold" / "PutnamBench").exists(),
+                    reason="PutnamBench is fetched here, so the script would start the search")
+def test_missing_putnam_points_to_the_gold_fetch(tmp_path, local):
+    _, _, _, stub, model = local
+    res = _script([], {"PY": sys.executable, "MODEL": str(model), "CONFIG": str(CONFIG), "BENCHMARK": "putnam",
+                       "CONDITIONS": "lm", "PYTHONPATH": str(stub)}, tmp_path)
+    assert res.returncode == 1 and "scripts/fetch_gold_sources.sh" in res.stderr
+
+
 def test_dry_run_is_local_resumable_and_credential_free(tmp_path):
     res = _script(["--dry-run"], {"HOURS": "7", "LIMIT": "30"}, tmp_path)
     assert res.returncode == 0, res.stderr
     run = next(l for l in res.stdout.splitlines() if l.startswith("run:"))
-    for part in ("markov_lean.mac_guard --hours 7 --hours-flag=--max-hours", "--resume-free-gb 10",
+    for part in ("markov_lean.mac_guard --hours 7 --hours-flag=--max-hours", "--resume-free-gb 4",
                  "--backend llama_cpp", "--limit 30", "--workers 1", "--yes", "--no-parquet",
                  "--condition lm", "--condition area_l0.3", "--condition random_l0.3",
                  "-u ANTHROPIC_API_KEY", "-u AWS_ACCESS_KEY_ID", "-u AWS_SECRET_ACCESS_KEY"):
         assert part in run
     assert "search_report" in res.stdout and "--no-runner-yield" not in run
+    report = next(l for l in res.stdout.splitlines() if l.startswith("report:"))
+    assert "--runs results/mac_overnight --out results/mac_overnight/report" in report   # every benchmark
+    putnam = _script(["--dry-run"], {"BENCHMARK": "putnam", "LIMIT": "150"}, tmp_path).stdout
+    run = next(l for l in putnam.splitlines() if l.startswith("run:"))
+    assert "--benchmark putnam" in run and "--limit 150" in run and "--out results/mac_overnight " in run
+    assert "--runs results/mac_overnight --out" in putnam   # the miniF2F report is extended, not replaced
     for plan, hours in (("full", "48"), ("night", "12")):
         res = _script(["--dry-run"], {"PLAN": plan}, tmp_path)
         assert f"--hours {hours} " in res.stdout
