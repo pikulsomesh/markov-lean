@@ -1,0 +1,59 @@
+# PFR (teorth/pfr) module -> MSC 2020 top-level code, for `python -m markov_lean.pfr`.
+#
+# Free, hand-made labels for the PFR case study. Keys are module paths under PFR/
+# without `.lean`; the longest whole-folder prefix wins. PFR/Mathlib/* mirrors Mathlib's
+# own folders, so those files use configs/premise_msc.yaml instead and are not listed.
+#
+# The split is a judgement call and is the main threat to these labels: the entropic
+# PFR argument proves additive-combinatorics statements (11, sumsets and cosets) with
+# information theory (94, Shannon entropy and entropic Ruzsa distance). Files whose
+# lemmas are entropy inequalities get 94; files whose statements are about sets,
+# cosets and homomorphisms get 11; probability plumbing gets 60.
+pfr_commit: 1899ce8ed95fc310cce53d4c7ecfa2beb20ebec4
+areas:
+  ForMathlib/Entropy: "94"
+  ForMathlib/Entropy/RuzsaSetDist: "11"
+  ForMathlib/FiniteRange: "60"
+  ForMathlib/ConditionalIndependence: "60"
+  ForMathlib/FourVariables: "94"
+  ForMathlib/ThreeVariables: "94"
+  ForMathlib/Pair: "60"
+  ForMathlib/Uniform: "60"
+  ForMathlib/AffineSpaceDim: "15"
+  Tactic: null
+  Kullback: "94"
+  MoreRuzsaDist: "94"
+  BoundingMutual: "94"
+  Fibring: "94"
+  FirstEstimate: "94"
+  SecondEstimate: "94"
+  Endgame: "94"
+  TorsionEndgame: "94"
+  EntropyPFR: "94"
+  ImprovedPFR: "94"
+  RhoFunctional: "94"
+  TauFunctional: "94"
+  MultiTauFunctional: "94"
+  HundredPercent: "11"
+  Main: "11"
+  WeakPFR: "11"
+  HomPFR: "11"
+  ApproxHomPFR: "11"
+  Examples: "11"
+
+# Blueprint chapter (blueprint/src/chapter/<name>.tex) -> MSC code. A declaration named
+# in a chapter's \lean{...} tags gets that chapter's code; about 260 of the ~880 are tagged.
+chapters:
+  entropy: "94"
+  distance: "94"
+  fibring: "94"
+  entropy_pfr: "94"
+  improved_exponent: "94"
+  further_improvement: "94"
+  torsion: "94"
+  jensen: "26"
+  100_percent: "11"
+  pfr: "11"
+  weak_pfr: "11"
+  hom_pfr: "11"
+  approx_hom_pfr: "11"
