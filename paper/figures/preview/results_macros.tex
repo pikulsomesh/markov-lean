@@ -46,7 +46,11 @@
 \newcommand{\resSearchGainHiMiniF}{\tbd}  % minif2f: upper end of that interval
 \newcommand{\resSearchRandomGainMiniF}{\tbd}  % minif2f: random scores at the same weight minus LM prior, in points
 \newcommand{\resSearchProblemsMiniF}{\tbd}  % minif2f: problems in the search runs
-\newcommand{\resSearchStatementErrorsMiniF}{\tbd}  % minif2f: problems whose statement fails to elaborate (unsolved in every condition)
+\newcommand{\resSearchStatementErrorsMiniF}{\tbd}  % minif2f: problems with a statement error in every condition they ran (the statement itself fails)
+\newcommand{\resSearchStatementErrorsSomeMiniF}{\tbd}  % minif2f: problems with a statement error in some conditions but not all (a Lean timeout or REPL restart at the statement)
+\newcommand{\resSearchGainElabMiniF}{\tbd}  % minif2f: area prior minus LM prior, in points, on the problems with no statement error under either
+\newcommand{\resSearchGainElabLoMiniF}{\tbd}  % minif2f: lower end of the paired 95% bootstrap interval of that change
+\newcommand{\resSearchGainElabHiMiniF}{\tbd}  % minif2f: upper end of that interval
 \newcommand{\resSearchBasePutnam}{\tbd}  % putnam: problems solved (%) with the LM prior alone
 \newcommand{\resSearchAreaPutnam}{\tbd}  % putnam: problems solved (%) with the area prior
 \newcommand{\resSearchGainPutnam}{\tbd}  % putnam: change in problems solved, area prior minus LM prior, in points
@@ -54,7 +58,11 @@
 \newcommand{\resSearchGainHiPutnam}{\tbd}  % putnam: upper end of that interval
 \newcommand{\resSearchRandomGainPutnam}{\tbd}  % putnam: random scores at the same weight minus LM prior, in points
 \newcommand{\resSearchProblemsPutnam}{\tbd}  % putnam: problems in the search runs
-\newcommand{\resSearchStatementErrorsPutnam}{\tbd}  % putnam: problems whose statement fails to elaborate (unsolved in every condition)
+\newcommand{\resSearchStatementErrorsPutnam}{\tbd}  % putnam: problems with a statement error in every condition they ran (the statement itself fails)
+\newcommand{\resSearchStatementErrorsSomePutnam}{\tbd}  % putnam: problems with a statement error in some conditions but not all (a Lean timeout or REPL restart at the statement)
+\newcommand{\resSearchGainElabPutnam}{\tbd}  % putnam: area prior minus LM prior, in points, on the problems with no statement error under either
+\newcommand{\resSearchGainElabLoPutnam}{\tbd}  % putnam: lower end of the paired 95% bootstrap interval of that change
+\newcommand{\resSearchGainElabHiPutnam}{\tbd}  % putnam: upper end of that interval
 \newcommand{\resSwitchJudgeProofs}{\tbd}  % switches, judge: proofs with at least two area-labelled steps
 \newcommand{\resSwitchJudgeHas}{\tbd}  % switches, judge: proofs with at least one switch, in percent
 \newcommand{\resSwitchJudgeHasLo}{\tbd}  % switches, judge: lower end of its 95% bootstrap interval over proofs, in percent

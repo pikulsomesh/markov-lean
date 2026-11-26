@@ -505,17 +505,21 @@ def test_search_figure_waits_for_the_area_prior_run(tmp_path, paper_dir):
     assert items[("table", "table_search")] == "real"  # the table still shows the LM row
 
 
-def _write_mac_search(root: Path, n: int = 20):
+def _write_mac_search(root: Path, n: int = 20, transient: dict | None = None):
     """Shaped like the Mac run (configs/search_eval_mac_overnight.yaml): lm, area_l0.3 and random_l0.3 on
     miniF2F, one seed, 12 expansions and 180 s.  lm solves 0-7; area_l0.3 drops 7 and adds 8; random_l0.3
     drops 6; problems 18 and 19 fail to elaborate in every condition."""
     solved = {"lm": set(range(8)), "area_l0.3": set(range(7)) | {8}, "random_l0.3": set(range(8)) - {6}}
+    transient = transient or {}  # condition -> problems whose statement step timed out there only
     for cond, ok in solved.items():
+        ok = ok - transient.get(cond, set())
         d = root / "minif2f" / cond / "seed0"
         d.mkdir(parents=True)
         lines = []
         for i in range(n):
             stop = "statement error: unknown identifier" if i >= n - 2 else ("solved" if i in ok else "budget")
+            if i in transient.get(cond, set()):
+                stop = "statement error: no response in 60s"
             lines.append(json.dumps({"proof_id": f"minif2f:p{i}", "theorem": f"p{i}", "solved": i in ok,
                                      "stop_reason": stop, "expansions": 2, "elapsed": 9.0,
                                      "max_expansions": 12, "wall_time": 180.0}))
@@ -552,9 +556,25 @@ def test_mac_search_run_draws_figure_5(tmp_path, paper_dir):
     assert v["resSearchCondition"] == r"\texttt{area\_l0.3}"
     assert v["resSearchExpansions"] == "12" and v["resSearchWallTime"] == "180"
     assert v["resSearchProblemsMiniF"] == "20" and v["resSearchStatementErrorsMiniF"] == "2"
+    assert v["resSearchStatementErrorsSomeMiniF"] == "0" and v["resSearchGainElabMiniF"] == "$+0.0$~points"
     assert v["resSearchGainPutnam"] == r"\tbd"  # no Putnam run
     rows = (paper_dir / "figures" / "table_search.tex").read_text()
     assert "dynamics term only ($\\lambda = 0.3$) & 40.0" in rows and "Random scores" in rows
+
+
+def test_statement_errors_split_every_condition_from_some(tmp_path, paper_dir):
+    """A statement error in only one condition (a Lean timeout there) is not counted as the statement failing,
+    and the clean gain leaves those problems out of the comparison."""
+    runs = tmp_path / "results"
+    # problem 3 (solved by lm) times out at its statement under area_l0.3; 12 under random_l0.3 only
+    _write_mac_search(runs / "mac_overnight", transient={"area_l0.3": {3}, "random_l0.3": {12}})
+    P.run(runs, paper_dir, verbose=False)
+    v = macros(paper_dir / "figures" / "results_macros.tex")
+    assert v["resSearchStatementErrorsMiniF"] == "2"  # 18 and 19 fail in every condition
+    assert v["resSearchStatementErrorsSomeMiniF"] == "2"  # 3 and 12
+    assert v["resSearchGainMiniF"] == "$-5.0$~points"  # 6/20 vs 7/20 counting the timeout as a failure
+    assert v["resSearchGainElabMiniF"] == "$+0.0$~points"  # 17 problems without one under lm or area: 7 solved each
+    assert v["resSearchGainElabLoMiniF"].startswith("$-") and v["resSearchGainElabHiMiniF"].startswith("$+")
 
 
 def test_named_area_condition_that_did_not_run_withholds(tmp_path, paper_dir):
