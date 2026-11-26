@@ -28,23 +28,24 @@ through the same pipeline end to end.
 
 \subsection{Is the model Markovian?}
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \maybefigure{implied_timescales}{0.47\linewidth}\hfill
-  \maybefigure{transition_matrix}{0.47\linewidth}
+  \maybefigure{implied_timescales}{\columnwidth}\hfill
+  \maybefigure{transition_matrix}{\columnwidth}
   \caption{Left: implied timescales against the lag $\lag$, both in proof
   steps; bands are bootstrap intervals over proofs, and the gray region marks
   processes faster than the lag. Right: transition matrix between
   macrostates at the chosen lag. \todo{lag and number of macrostates.}}
   \label{fig:its}
-\end{figure}
+\end{figure*}
 
 \begin{figure}[t]
   \centering
-  \maybefigure{chapman_kolmogorov}{0.9\linewidth}
-  \caption{Chapman--Kolmogorov test. Lines show the model's prediction
-  $\T(\lag)^k$; points show $\T(k\lag)$ estimated directly from the data,
-  with bootstrap error bars.}
+  \maybefigure{chapman_kolmogorov_diagonal}{\columnwidth}
+  \caption{Chapman--Kolmogorov test, probability of staying in each
+  macrostate. Lines show the model's prediction $\T(\lag)^k$; points show
+  $\T(k\lag)$ estimated directly from the data, with bootstrap error bars.
+  Every pair of macrostates is in Figure~\ref{fig:ck-full}.}
   \label{fig:ck}
 \end{figure}
 
@@ -54,16 +55,16 @@ fails.}
 
 \subsection{Do macrostates match areas?}
 
-\begin{figure}[t]
+\begin{figure*}[t]
   \centering
-  \maybefigure{judge_confusion}{0.47\linewidth}\hfill
-  \maybefigure{area_flow}{0.47\linewidth}
+  \maybefigure{judge_confusion}{\columnwidth}\hfill
+  \maybefigure{area_flow}{\columnwidth}
   \caption{Left: macrostates (rows) against the judges' consensus MSC code
-  (columns), row-normalized; NMI $=$ \resMacroNMI. Right: the \resFlowsShown
+  (columns), row-normalized; NMI $=$ \resMacroNMI. Right: the \resFlowsShown{}
   largest flows between areas within proofs, covering \resFlowCoverage\% of
   area changes.}
   \label{fig:areas}
-\end{figure}
+\end{figure*}
 
 We call the area hypothesis supported if the macrostates reach an NMI of at
 least 0.15 against the judges' consensus labels and beat the Mathlib-folder
@@ -133,7 +134,7 @@ null.}
 
 \begin{figure*}[t]
   \centering
-  \maybefigure{switches}{0.8\linewidth}
+  \maybefigure{switches}{\textwidth}
   \caption{Within-proof area switching against its nulls. Top: each statistic
   of Table~\ref{tab:switches}, observed (points, 95\% bootstrap intervals over
   proofs) and the mean under each null (bars). Bottom left, one panel per area source: the distribution of

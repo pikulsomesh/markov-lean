@@ -133,9 +133,39 @@ def test_chapman_kolmogorov_rejects_mismatch(plt):
 def test_transition_heatmap(plt, tmp_path):
     T = _msm(4)
     fig = figures.transition_heatmap(T, labels=list("abcd"))
-    texts = [t.get_text() for t in fig.axes[0].texts]
+    assert len(fig.axes[0].texts) == 0  # no numbers by default: the colour scale reads them
+    annotated = figures.transition_heatmap(T, labels=list("abcd"), annotate=True)
+    texts = [t.get_text() for t in annotated.axes[0].texts]
     assert len(texts) == 16 and f"{T[0, 0]:.2f}" in texts
     figures.save_pdf(fig, tmp_path / "T.pdf")
+
+
+def test_chapman_kolmogorov_diagonal_shows_stay_panels(plt, tmp_path):
+    T = _msm(7)
+    ks = np.arange(1, 5)
+    pred = np.stack([np.linalg.matrix_power(T, k) for k in ks])
+    fig = figures.chapman_kolmogorov_diagonal(ks, pred, pred, labels=[f"M{i + 1}" for i in range(7)])
+    shown = [ax for ax in fig.axes if ax.get_visible()]
+    assert len(shown) == 7  # 2 rows of 5, the last three hidden
+    assert shown[6].get_title() == "M7$\\to$M7"
+    assert np.allclose(shown[2].get_lines()[0].get_ydata(), pred[:, 2, 2])
+    path = figures.save_pdf(fig, tmp_path / "ckd.pdf")
+    assert fig.get_size_inches()[0] == pytest.approx(figures.COLUMN_WIDTH)
+    assert b"/MediaBox [ 0 0 234" in path.read_bytes()  # 3.25 in: saved at the drawn size, not cropped
+
+
+def test_chapman_kolmogorov_full_grid_is_full_width(plt):
+    T = _msm(10)
+    pred = np.stack([np.linalg.matrix_power(T, k) for k in (1, 2, 3)])
+    fig = figures.chapman_kolmogorov([1, 2, 3], pred, pred)
+    assert fig.get_size_inches()[0] == pytest.approx(figures.TEXT_WIDTH)
+    assert len(fig.axes) == 100
+
+
+def test_text_is_8_pt_with_7_pt_ticks():
+    rc = figures.paper_rc()
+    assert rc["axes.labelsize"] == 8 and rc["font.size"] == 8
+    assert rc["xtick.labelsize"] == 7 and rc["ytick.labelsize"] == 7 and rc["legend.fontsize"] == 7
 
 
 def test_transition_heatmap_requires_stochastic(plt):
@@ -186,6 +216,16 @@ def test_area_flow(plt, tmp_path):
     shown = set(flows.head(5).from_area) | set(flows.head(5).to_area)
     assert {names[a] for a in shown} <= labels
     figures.save_pdf(fig, tmp_path / "flow.pdf")
+
+
+def test_msc_codes_get_short_names(plt):
+    flows = pd.DataFrame({"from_area": ["28", "26"], "to_area": ["26", "54"], "count": [5, 3]})
+    labels = {t.get_text() for t in figures.area_flow(flows).axes[0].texts}
+    assert {"28 Measure, integration", "26 Real functions", "54 General topology"} <= labels
+    fig = figures.judge_cluster_confusion(["M2", "M10", "M1", "M2"], ["28", "26", "11", "28"])
+    ax = fig.axes[0]
+    assert [t.get_text() for t in ax.get_yticklabels()] == ["M1", "M2", "M10"]
+    assert "11 Number theory" in [t.get_text() for t in ax.get_xticklabels()]
 
 
 def test_area_flow_rejects_empty(plt):

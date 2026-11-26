@@ -34,6 +34,7 @@ make
 - An **AI Use Statement** and an **Impact Statement** are required. They are unnumbered sections before the references, in `sections/statements.tex`.
 - The abstract is one paragraph, 4 to 6 sentences.
 - Protect capitals in `refs.bib` with braces, e.g. `{Markov}`.
+- Figures are drawn at the width they print, 3.25 in for one column and 6.75 in across the page, with 8 pt sans-serif text (7 pt tick labels), and the `.tex` includes them at exactly `\columnwidth` or `\textwidth`. Two panels side by side go in a `figure*`, each `\columnwidth` wide. Including a figure at any other width rescales its text.
 - Captions go under figures, and figures carry no titles of their own. The figure functions draw none by default; the confusion matrix's NMI and the flow plot's coverage are attached to the Figure for the caption.
 - The kit asks for Type-1 fonts and warns against Type 3. matplotlib can't write Type 1 without LaTeX, so `figures.save_pdf` embeds TrueType and never Type 3. Check the built paper with `pdffonts main.pdf` before submitting.
 - An OpenReview profile is needed by Dec 31, 2026. The author list freezes at the Jan 14, 2027 abstract deadline.

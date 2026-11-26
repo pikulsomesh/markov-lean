@@ -92,6 +92,26 @@ MSC2020_TOP: dict[str, str] = {
     "97": "Mathematics education",
 }
 
+# Short names for figure labels (12 to 20 characters), one per code above.
+MSC2020_SHORT: dict[str, str] = {
+    "00": "General", "01": "History", "03": "Logic", "05": "Combinatorics",
+    "06": "Order, lattices", "08": "General algebra", "11": "Number theory", "12": "Fields, polynomials",
+    "13": "Commutative algebra", "14": "Algebraic geometry", "15": "Linear algebra", "16": "Associative rings",
+    "17": "Nonassociative rings", "18": "Category theory", "19": "K-theory", "20": "Group theory",
+    "22": "Topological groups", "26": "Real functions", "28": "Measure, integration", "30": "Complex functions",
+    "31": "Potential theory", "32": "Several complex var.", "33": "Special functions", "34": "ODEs",
+    "35": "PDEs", "37": "Dynamical systems", "39": "Difference equations", "40": "Sequences, series",
+    "41": "Approximation", "42": "Harmonic analysis", "43": "Abstract harmonic", "44": "Integral transforms",
+    "45": "Integral equations", "46": "Functional analysis", "47": "Operator theory", "49": "Optimization",
+    "51": "Geometry", "52": "Convex geometry", "53": "Differential geometry", "54": "General topology",
+    "55": "Algebraic topology", "57": "Manifolds", "58": "Global analysis", "60": "Probability",
+    "62": "Statistics", "65": "Numerical analysis", "68": "Computer science", "70": "Mechanics",
+    "74": "Solid mechanics", "76": "Fluid mechanics", "78": "Optics, EM", "80": "Thermodynamics",
+    "81": "Quantum theory", "82": "Statistical mechanics", "83": "Relativity", "85": "Astronomy",
+    "86": "Geophysics", "90": "Operations research", "91": "Game theory, econ.", "92": "Biology",
+    "93": "Systems, control", "94": "Information theory", "97": "Math education",
+}
+
 CODES: tuple[str, ...] = tuple(MSC2020_TOP)
 
 # Areas that carry most of Mathlib and the competition benchmarks
@@ -131,6 +151,14 @@ def title(code: str) -> str:
     if c is None:
         raise KeyError(f"not an MSC 2020 top-level code: {code!r}")
     return MSC2020_TOP[c]
+
+
+def short_title(code: object, with_code: bool = True) -> str:
+    """A short name for figure labels, e.g. "28 Measure, integration"; anything else comes back as ``str(code)``."""
+    c = normalize(code)
+    if c is None:
+        return str(code)
+    return f"{c} {MSC2020_SHORT[c]}" if with_code else MSC2020_SHORT[c]
 
 
 def prompt_listing() -> str:

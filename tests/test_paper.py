@@ -472,12 +472,37 @@ def test_switches_fill_the_paper(tmp_path, paper_dir):
 def test_switches_json_alone_rebuilds_the_table_and_keeps_the_figure_preview(tmp_path, paper_dir):
     results = make_results(tmp_path / "results", search=False)
     sw = results / "pilot3" / "switches"
-    (sw / "table_switches.tex").unlink()
-    (sw / "switches.pdf").unlink()
+    for name in ("table_switches.tex", "switches.pdf", "dwell.csv"):
+        (sw / name).unlink(missing_ok=True)
     items = {(i.kind, i.name): i.status for i in P.run(results, paper_dir, verbose=False)}
     assert items[("table", "table_switches")] == "real"
     assert "Judge MSC" in (paper_dir / "figures" / "table_switches.tex").read_text()
-    assert items[("figure", "switches")] == "preview"
+    assert items[("figure", "switches")] == "preview"  # no dwell table, so the figure cannot be redrawn
+
+
+def test_switches_figure_is_redrawn_at_text_width_from_the_run_results(tmp_path, paper_dir):
+    """The run's own switches.pdf may be at an older size, so the paper redraws it from switches.json + dwell.csv."""
+    results = make_results(tmp_path / "results", search=False)
+    (results / "pilot3" / "switches" / "switches.pdf").unlink(missing_ok=True)
+    items = {(i.kind, i.name): i.status for i in P.run(results, paper_dir, verbose=False)}
+    assert items[("figure", "switches")] == "real"
+    raw = (paper_dir / "figures" / "switches.pdf").read_bytes()
+    assert b"/MediaBox [ 0 0 486" in raw  # 6.75 in
+
+
+def test_search_figure_waits_for_the_area_prior_run(tmp_path, paper_dir):
+    """A search run with the LM prior alone draws one bar: the figure is withheld and an earlier one removed."""
+    runs = tmp_path / "lm_only"
+    _write_search(runs / "search_eval")
+    for bench in ("minif2f", "putnam"):
+        for cond in ("full", "random_l0.3"):
+            shutil.rmtree(runs / "search_eval" / bench / cond)
+    (paper_dir / "figures").mkdir(parents=True, exist_ok=True)
+    (paper_dir / "figures" / "search_ablation.pdf").write_bytes(b"%PDF old one-bar figure")
+    items = {(i.kind, i.name): i.status for i in P.run(runs, paper_dir, verbose=False)}
+    assert items[("figure", "search_ablation")] == "withheld"
+    assert not (paper_dir / "figures" / "search_ablation.pdf").exists()
+    assert items[("table", "table_search")] == "real"  # the table still shows the LM row
 
 
 def test_switches_stale_table_goes_back_to_preview(tmp_path, paper_dir):

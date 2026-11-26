@@ -19,7 +19,8 @@ import pandas as pd
 
 from markov_lean import figures as F
 
-AREAS = ["05", "11", "13", "26", "54", "60"]  # MSC 2020 top-level codes
+AREAS = ["05", "11", "13", "26", "28", "54", "60"]  # MSC 2020 top-level codes
+M = 10  # macrostates, as in the pilot model
 STAMP = "synthetic preview"
 
 
@@ -45,27 +46,27 @@ def make_all(rng) -> list[tuple[str, object]]:
 
     # implied timescales that level off after a few steps of lag
     lags = np.arange(1, 11)
-    t_inf = np.array([22.0, 9.0, 4.5])
+    t_inf = np.array([60.0, 34.0, 22.0, 14.0, 9.0, 4.5])
     ts = t_inf * (1 - 0.55 * np.exp(-lags[:, None] / 2.5))
     out.append(("implied_timescales", F.implied_timescales(lags, ts, ts * 0.88, ts * 1.12)))
 
     # macrostate transition matrix at the chosen lag
-    T4 = sticky_matrix(4, 0.78, rng)
-    out.append(("transition_matrix", F.transition_heatmap(T4, ["M1", "M2", "M3", "M4"])))
+    names = [f"M{i + 1}" for i in range(M)]
+    out.append(("transition_matrix", F.transition_heatmap(sticky_matrix(M, 0.9, rng), names)))
 
-    # Chapman-Kolmogorov: model T^k against noisy direct estimates
-    T3 = sticky_matrix(3, 0.85, rng)
+    # Chapman-Kolmogorov: model T^k against noisy direct estimates (stay panels in the text, grid in the appendix)
+    TM = sticky_matrix(M, 0.85, rng)
     ks = np.arange(1, 6)
-    pred = np.stack([np.linalg.matrix_power(T3, k) for k in ks])
+    pred = np.stack([np.linalg.matrix_power(TM, k) for k in ks])
     est = np.clip(pred + rng.normal(0, 0.02, pred.shape), 0, 1)
     err = np.full_like(est, 0.03)
-    out.append(("chapman_kolmogorov",
-                F.chapman_kolmogorov(ks * 2, pred, est, err, labels=["M1", "M2", "M3"])))
+    out.append(("chapman_kolmogorov_diagonal", F.chapman_kolmogorov_diagonal(ks * 2, pred, est, err, labels=names)))
+    out.append(("chapman_kolmogorov", F.chapman_kolmogorov(ks * 2, pred, est, err, labels=names)))
 
     # macrostates against judge MSC codes: mostly diagonal, with confusion
     n = 3000
     truth = rng.integers(0, len(AREAS), n)
-    noisy = np.where(rng.random(n) < 0.35, rng.integers(0, len(AREAS), n), truth)
+    noisy = np.where(rng.random(n) < 0.35, rng.integers(0, M, n), truth)
     clusters = np.array([f"M{i + 1}" for i in noisy])
     judge = np.array(AREAS)[truth]
     out.append(("judge_confusion", F.judge_cluster_confusion(clusters, judge)))

@@ -714,10 +714,10 @@ def draw(results: dict[str, dict], dwell: pd.DataFrame):
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    from .figures import paper_rc
+    from .figures import BASE_PT, SMALL_PT, TEXT_WIDTH, paper_rc
 
-    with matplotlib.rc_context(paper_rc()):
-        fig = plt.figure(figsize=(7.0, 4.4), layout="constrained")
+    with matplotlib.rc_context(paper_rc()):  # drawn at the full text width it prints at
+        fig = plt.figure(figsize=(TEXT_WIDTH, 4.3), layout="constrained")
         top, bottom = fig.subfigures(2, 1, height_ratios=[1, 1.05])
         axes = top.subplots(1, len(STATS))
         srcs = list(results)
@@ -727,18 +727,18 @@ def draw(results: dict[str, dict], dwell: pd.DataFrame):
             for i, src in enumerate(srcs):
                 v = _overall(results[src])["statistics"][st]
                 ax.errorbar([i], [v["observed"]], yerr=[[v["observed"] - v["ci95"][0]], [v["ci95"][1] - v["observed"]]],
-                            fmt="o", color=pal["observed"], ms=5, capsize=2, zorder=3,
+                            fmt="o", color=pal["observed"], ms=4, capsize=2, zorder=3,
                             label="Observed" if i == 0 else None)
                 for k, n in enumerate(results[src]["nulls"]):
                     d = v["nulls"][n]
-                    ax.plot([i + 0.12 * (k + 1)], [d["null_mean"]], marker="_", ms=10, mew=2, color=pal[n],
+                    ax.plot([i + 0.12 * (k + 1)], [d["null_mean"]], marker="_", ms=8, mew=1.5, color=pal[n],
                             ls="none", label=NULL_LABELS[n] if n not in seen else None)
                     seen.add(n)
             # one word per line, so two or three sources fit under a quarter-width panel
             ax.set_xticks(range(len(srcs)), [SOURCE_LABELS.get(s, s).replace(" ", "\n") for s in srcs], rotation=0,
-                          fontsize="small")
+                          fontsize=SMALL_PT)
             ax.set_xlim(-0.4, len(srcs) - 0.2)
-            ax.set_title(STAT_LABELS[st], fontsize="medium")
+            ax.set_title(STAT_LABELS[st], fontsize=BASE_PT)
             sns.despine(ax=ax)
         handles, labels = [], []
         for ax in axes:
@@ -757,7 +757,7 @@ def draw(results: dict[str, dict], dwell: pd.DataFrame):
             ax.set_yscale("log")
             ax.set_xlabel("Dwell (steps)")
             ax.set_ylabel("Share of runs")
-            ax.set_title(f"{SOURCE_LABELS.get(src, src)}: dwell", fontsize="medium")
+            ax.set_title(f"{SOURCE_LABELS.get(src, src)}: dwell", fontsize=BASE_PT)
             sns.despine(ax=ax)
         ax = bax[-1]
         rows = []
@@ -779,10 +779,10 @@ def draw(results: dict[str, dict], dwell: pd.DataFrame):
             df = df.sort_values("length", kind="stable")
             sns.lineplot(data=df, x="length", y="rate", hue="source", style="series", marker="o", ms=3, ax=ax,
                          sort=False)
-            ax.legend(fontsize="x-small", frameon=False)
+            ax.legend(fontsize=SMALL_PT, frameon=False, handlelength=1.5, labelspacing=0.3)
         ax.set_xlabel("Proof length (labelled steps)")
         ax.set_ylabel("Switches per move")
-        ax.set_title("Switch rate by length", fontsize="medium")
+        ax.set_title("Switch rate by length", fontsize=BASE_PT)
         sns.despine(ax=ax)
     return fig
 
