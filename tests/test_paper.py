@@ -505,6 +505,74 @@ def test_search_figure_waits_for_the_area_prior_run(tmp_path, paper_dir):
     assert items[("table", "table_search")] == "real"  # the table still shows the LM row
 
 
+def _write_mac_search(root: Path, n: int = 20):
+    """Shaped like the Mac run (configs/search_eval_mac_overnight.yaml): lm, area_l0.3 and random_l0.3 on
+    miniF2F, one seed, 12 expansions and 180 s.  lm solves 0-7; area_l0.3 drops 7 and adds 8; random_l0.3
+    drops 6; problems 18 and 19 fail to elaborate in every condition."""
+    solved = {"lm": set(range(8)), "area_l0.3": set(range(7)) | {8}, "random_l0.3": set(range(8)) - {6}}
+    for cond, ok in solved.items():
+        d = root / "minif2f" / cond / "seed0"
+        d.mkdir(parents=True)
+        lines = []
+        for i in range(n):
+            stop = "statement error: unknown identifier" if i >= n - 2 else ("solved" if i in ok else "budget")
+            lines.append(json.dumps({"proof_id": f"minif2f:p{i}", "theorem": f"p{i}", "solved": i in ok,
+                                     "stop_reason": stop, "expansions": 2, "elapsed": 9.0,
+                                     "max_expansions": 12, "wall_time": 180.0}))
+        (d / "summary.jsonl").write_text("\n".join(lines) + "\n")
+
+
+def test_area_and_random_conditions():
+    assert P.area_condition(["lm", "full", "area_l0.3"]) == "full"
+    assert P.area_condition(["lm", "area_l0.6", "area_l0.3", "random_l0.3"]) == "area_l0.3"
+    assert P.area_condition(["lm", "area_l0.1", "area_l0.6"]) == "area_l0.1"  # nearer 0.3 (0.2 vs 0.3)
+    assert P.area_condition(["lm", "random_l0.3", "diversity"]) is None
+    assert P.area_condition(["lm", "area_l0.3"], "full") is None  # a named condition must have run
+    assert P.area_condition(["lm", "area_l0.6"], "area_l0.6") == "area_l0.6"
+    assert P.random_control(["lm", "area_l0.3", "random_l0.3"], "area_l0.3") == "random_l0.3"
+    assert P.random_control(["lm", "full", "random_l0.3"], "full") == "random_l0.3"
+    assert P.random_control(["lm", "area_l0.6", "random_l0.3"], "area_l0.6") is None  # not the same weight
+    assert P.random_control(["lm", "random_l0.3"], None) is None
+
+
+def test_mac_search_run_draws_figure_5(tmp_path, paper_dir):
+    """The Mac run names its area prior `area_l0.3`: the figure is drawn and the macros are real."""
+    runs = tmp_path / "results"
+    _write_mac_search(runs / "mac_overnight")
+    items = {(i.kind, i.name): i for i in P.run(runs, paper_dir, verbose=False)}
+    fig5 = items[("figure", "search_ablation")]
+    assert fig5.status == "real" and "area_l0.3" in fig5.note
+    raw = (paper_dir / "figures" / "search_ablation.pdf").read_bytes()
+    assert b"/MediaBox [ 0 0 234" in raw  # the ICML column, as the paper includes it
+    v = macros(paper_dir / "figures" / "results_macros.tex")
+    assert v["resSearchBaseMiniF"] == "40.0" and v["resSearchAreaMiniF"] == "40.0"
+    assert v["resSearchGainMiniF"] == "$+0.0$~points"
+    assert v["resSearchRandomGainMiniF"] == "$-5.0$~points"
+    assert v["resSearchGainLoMiniF"].startswith("$-") and v["resSearchGainHiMiniF"].startswith("$+")
+    assert v["resSearchCondition"] == r"\texttt{area\_l0.3}"
+    assert v["resSearchExpansions"] == "12" and v["resSearchWallTime"] == "180"
+    assert v["resSearchProblemsMiniF"] == "20" and v["resSearchStatementErrorsMiniF"] == "2"
+    assert v["resSearchGainPutnam"] == r"\tbd"  # no Putnam run
+    rows = (paper_dir / "figures" / "table_search.tex").read_text()
+    assert "dynamics term only ($\\lambda = 0.3$) & 40.0" in rows and "Random scores" in rows
+
+
+def test_named_area_condition_that_did_not_run_withholds(tmp_path, paper_dir):
+    runs = tmp_path / "results"
+    _write_mac_search(runs / "mac_overnight")
+    items = {(i.kind, i.name): i for i in P.run(runs, paper_dir, main_condition="full", verbose=False)}
+    assert items[("figure", "search_ablation")].status == "withheld"
+    assert "`full`" in items[("figure", "search_ablation")].note
+    assert macros(paper_dir / "figures" / "results_macros.tex")["resSearchAreaMiniF"] == r"\tbd"
+
+
+def test_cli_paper_defaults_to_auto_area_condition(tmp_path, paper_dir, capsys):
+    runs = tmp_path / "results"
+    _write_mac_search(runs / "mac_overnight")
+    cli.main(["paper", "--results", str(runs), "--paper", str(paper_dir)])
+    assert "real     search_ablation" in capsys.readouterr().out
+
+
 def test_switches_stale_table_goes_back_to_preview(tmp_path, paper_dir):
     run = _switch_run(tmp_path / "sw")
     P.run(tmp_path / "none", paper_dir, switches=run, verbose=False)

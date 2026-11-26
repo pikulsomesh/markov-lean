@@ -79,6 +79,7 @@ __all__ = [
     "judge_cluster_confusion",
     "area_flow",
     "search_ablation",
+    "search_paired",
     "save_pdf",
     "save_all",
 ]
@@ -719,6 +720,98 @@ def search_ablation(
                         ncol=min(len(methods), 3), borderaxespad=0.2, handlelength=1.0, columnspacing=1.0)
     elif legend is not None:
         legend.remove()
+    return fig
+
+
+@_themed
+def search_paired(
+    rates: pd.DataFrame,
+    diffs: pd.DataFrame,
+    *,
+    baseline: str,
+    group_col: str = "benchmark",
+    method_col: str = "method",
+    figsize=None,
+):
+    """Problems solved per search prior, and each prior's paired difference from ``baseline``.
+
+    One row of two panels per group (benchmark). Left: the share solved under each
+    method, a point with its interval. Right: the paired difference from ``baseline``
+    on the problems both ran, in points, with its interval and a line at zero, so a
+    null result reads as intervals across that line. The right-hand tick labels give
+    the discordant problems, ``+a −b``: solved only with that prior / only with the
+    baseline.
+
+    ``rates`` has ``group_col``, ``method_col``, ``rate``, ``lo``, ``hi`` (percent);
+    ``diffs`` has ``group_col``, ``method_col``, ``diff``, ``lo``, ``hi`` (points),
+    ``only_cond`` and ``only_base``. Methods are drawn top to bottom in their order
+    in ``rates``, and keep their color across groups.
+    """
+    _, plt = _plt()
+    for name, frame, need in (("rates", rates, ("rate", "lo", "hi")),
+                              ("diffs", diffs, ("diff", "lo", "hi", "only_cond", "only_base"))):
+        for col in (group_col, method_col, *need):
+            if col not in frame.columns:
+                raise KeyError(f"{name} is missing column {col!r}")
+    methods = list(dict.fromkeys(rates[method_col]))
+    if baseline not in methods:
+        raise ValueError(f"baseline {baseline!r} is not among the methods in rates")
+    groups = list(dict.fromkeys(rates[group_col]))
+    color = {m: color_for(i) for i, m in enumerate(methods)}
+    n = len(methods)
+    if figsize is None:
+        figsize = (COLUMN_WIDTH, len(groups) * (0.32 + 0.24 * n) + 0.42)
+    fig, axes = plt.subplots(len(groups), 2, figsize=figsize, layout="constrained", sharey=True,
+                             squeeze=False, gridspec_kw={"width_ratios": [1, 1]})
+    y = {m: n - 1 - i for i, m in enumerate(methods)}  # first method on top
+    span = 0.0
+    for g, (ax_r, ax_d) in zip(groups, axes):
+        rg = rates[rates[group_col] == g].set_index(method_col)
+        dg = diffs[diffs[group_col] == g].set_index(method_col)
+        for m in methods:
+            if m in rg.index and np.isfinite(rg.at[m, "rate"]):
+                r = rg.loc[m]
+                xerr = [[max(r["rate"] - r["lo"], 0)], [max(r["hi"] - r["rate"], 0)]] \
+                    if np.isfinite(r["lo"]) and np.isfinite(r["hi"]) else None
+                ax_r.errorbar(r["rate"], y[m], xerr=xerr, fmt="o", ms=4, color=color[m],
+                              ecolor=color[m], elinewidth=1.2, capsize=2)
+            if m == baseline:
+                ax_d.plot(0, y[m], marker="o", ms=4, mfc="white", mec=color[m], ls="none")
+                continue
+            if m in dg.index and np.isfinite(dg.at[m, "diff"]):
+                d = dg.loc[m]
+                ok = np.isfinite(d["lo"]) and np.isfinite(d["hi"])
+                xerr = [[max(d["diff"] - d["lo"], 0)], [max(d["hi"] - d["diff"], 0)]] if ok else None
+                ax_d.errorbar(d["diff"], y[m], xerr=xerr, fmt="o", ms=4, color=color[m],
+                              ecolor=color[m], elinewidth=1.2, capsize=2)
+                span = max(span, *(abs(v) for v in (d["diff"], d["lo"], d["hi"]) if np.isfinite(v)))
+        ax_d.axvline(0, color=TEXT_SECONDARY, lw=0.8, ls=(0, (3, 2)), zorder=0)
+        ax_r.set_yticks([y[m] for m in methods], methods)
+        ax_r.set_ylim(-0.6, n - 0.4)
+        if len(groups) > 1:
+            ax_r.set_ylabel(str(g))
+        # discordant counts as right-hand tick labels, so the layout makes room for them
+        right = ax_d.secondary_yaxis("right")
+        labels = []
+        for m in methods:
+            if m == baseline or m not in dg.index:
+                labels.append("")
+            else:
+                labels.append(f"+{int(dg.at[m, 'only_cond'])} \u2212{int(dg.at[m, 'only_base'])}")
+        right.set_yticks([y[m] for m in methods], labels)
+        right.tick_params(length=0)
+        right.spines["right"].set_visible(False)
+        for ax in (ax_r, ax_d):
+            ax.grid(axis="x")
+            ax.set_axisbelow(True)
+        ax_d.tick_params(axis="y", left=False)
+        ax_d.spines["left"].set_visible(False)  # the dashed zero line is the reference here
+    lim = max(1.0, 1.15 * span)
+    for ax_r, ax_d in axes:
+        ax_d.set_xlim(-lim, lim)
+    axes[-1][0].set_xlabel("solved (%)")
+    axes[-1][1].set_xlabel(f"change from {baseline} (pts)")
+    fig.methods = methods
     return fig
 
 

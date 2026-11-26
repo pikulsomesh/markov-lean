@@ -312,3 +312,41 @@ def test_saved_pdf_uses_the_paper_font_not_the_global_default(plt, tmp_path):
     raw = out.read_bytes()
     assert b"DejaVuSans" not in raw.replace(b"DejaVuSans-", b"")  # text font, not math fallback
     assert any(name.encode() in raw for name in ("Arial", "Helvetica", "LiberationSans", "NimbusSans"))
+
+
+def _paired_frames():
+    rates = pd.DataFrame({"benchmark": ["miniF2F"] * 3, "method": ["LM only", "area", "random"],
+                          "rate": [39.8, 39.3, 39.3], "lo": [33.6, 33.2, 33.2], "hi": [45.9, 45.5, 45.5]})
+    diffs = pd.DataFrame({"benchmark": ["miniF2F"] * 2, "method": ["area", "random"], "diff": [-0.4, -0.4],
+                          "lo": [-2.9, -2.5], "hi": [2.0, 1.6], "only_cond": [5, 4], "only_base": [6, 5]})
+    return rates, diffs
+
+
+def test_search_paired(plt, tmp_path):
+    rates, diffs = _paired_frames()
+    fig = figures.search_paired(rates, diffs, baseline="LM only")
+    ax_r, ax_d = fig.axes[:2]
+    assert [t.get_text() for t in ax_r.get_yticklabels()] == ["LM only", "area", "random"]
+    lo, hi = ax_d.get_xlim()
+    assert lo == pytest.approx(-hi) and hi >= 2.9  # symmetric around zero, every interval inside
+    labels = [t.get_text() for t in ax_d.child_axes[0].get_yticklabels()]
+    assert labels == ["", "+5 −6", "+4 −5"]
+    assert fig.get_size_inches()[0] == pytest.approx(figures.COLUMN_WIDTH)
+    raw = figures.save_pdf(fig, tmp_path / "paired.pdf").read_bytes()
+    assert b"/MediaBox [ 0 0 234" in raw
+
+
+def test_search_paired_rows_per_benchmark(plt):
+    rates, diffs = _paired_frames()
+    rates = pd.concat([rates, rates.assign(benchmark="PutnamBench")])
+    diffs = pd.concat([diffs, diffs.assign(benchmark="PutnamBench")])
+    fig = figures.search_paired(rates, diffs, baseline="LM only")
+    assert fig.axes[0].get_ylabel() == "miniF2F" and fig.axes[2].get_ylabel() == "PutnamBench"
+
+
+def test_search_paired_checks_inputs(plt):
+    rates, diffs = _paired_frames()
+    with pytest.raises(KeyError):
+        figures.search_paired(rates.drop(columns="lo"), diffs, baseline="LM only")
+    with pytest.raises(ValueError):
+        figures.search_paired(rates, diffs, baseline="nope")
