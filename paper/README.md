@@ -10,7 +10,18 @@ make          # main.pdf, with latexmk if installed, else pdflatex + bibtex
 make style    # says whether the ICML style or the article fallback will be used
 ```
 
-`main.pdf` is the latest build, committed so the draft can be read on GitHub. Rebuild and commit it when the text changes. It needs a TeX distribution with latexmk: MacTeX on the Mac, or `texlive-latex-extra`, `texlive-fonts-recommended` and `latexmk` on Debian/Ubuntu.
+`main.pdf` is the latest build, committed so the draft can be read on GitHub. Rebuild and commit it when the text changes. It needs a TeX distribution with latexmk: BasicTeX on the Mac (about 300 MB, versus about 9 GB for full MacTeX), or `texlive-latex-extra`, `texlive-fonts-recommended` and `latexmk` on Debian/Ubuntu.
+
+On the Mac:
+
+```
+brew install --cask basictex && eval "$(/usr/libexec/path_helper)"
+sudo tlmgr update --self
+sudo tlmgr install latexmk booktabs microtype caption eso-pic forloop printlen newtx float courier helvetic
+make
+```
+
+`courier` and `helvetic` are needed: without `courier`, `\texttt` fails with a missing `pcrr7t` font.
 
 `main.tex` follows the official ICML 2027 `example_paper.tex`. It falls back to the plain article class (natbib, `plainnat`) only if `icml2027.sty` is missing.
 
