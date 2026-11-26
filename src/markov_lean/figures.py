@@ -9,8 +9,10 @@ Style: seaborn's ``ticks`` look at ``paper`` scale with a sans-serif font
 is not installed). Every figure is drawn inside :func:`paper_rc`, so importing
 this module changes no global matplotlib settings; call :func:`use_paper_style`
 to apply the same look to your own plots. PDFs embed TrueType fonts, never
-Type 3, which the ICML instructions warn against. Default sizes fit the ICML
-column (3.25 in) unless a figure needs the full text width (6.75 in). The ICML
+Type 3, which the ICML instructions warn against. Every figure is drawn at the
+size it prints, the ICML column (3.25 in) or the full text width (6.75 in), and
+the paper includes it at that width, so its 8 pt text (7 pt tick labels) prints
+at 8 pt; :func:`save_pdf` keeps the drawn size instead of cropping. The ICML
 instructions put captions under figures and no titles inside the graphic, so
 no figure draws a title by default; figures that compute a headline number
 (NMI, the share of moves a flow plot covers) attach it to the Figure for the
@@ -55,6 +57,10 @@ SANS_SERIF = ("Arial", "Helvetica", "Liberation Sans", "Nimbus Sans", "DejaVu Sa
 # ICML 2027 two-column layout, inches.
 COLUMN_WIDTH = 3.25
 TEXT_WIDTH = 6.75
+# Printed text sizes in points: labels, titles and legend titles at BASE_PT,
+# tick labels, legends and annotations at SMALL_PT (the floor for printed text).
+BASE_PT = 8.0
+SMALL_PT = 7.0
 
 __all__ = [
     "CATEGORICAL",
@@ -68,6 +74,7 @@ __all__ = [
     "area_transitions",
     "implied_timescales",
     "chapman_kolmogorov",
+    "chapman_kolmogorov_diagonal",
     "transition_heatmap",
     "judge_cluster_confusion",
     "area_flow",
@@ -97,18 +104,32 @@ def color_for(i: int) -> str:
     return CATEGORICAL[i] if 0 <= i < len(CATEGORICAL) else OTHER
 
 
-def paper_rc(font_scale: float = 0.9) -> dict:
+def paper_rc(font_scale: float = 1.0) -> dict:
     """matplotlib rc settings for the paper: seaborn ``ticks`` + ``paper`` context, sans-serif.
 
-    ``font_scale`` 0.9 puts tick labels near 7 pt and axis labels near 8.5 pt,
-    a little under the 9 pt ICML caption size.
+    Text sizes are set in points, not scaled from seaborn's defaults: axis
+    labels and titles 8 pt, tick labels and legends 7 pt, a little under the
+    9 pt ICML caption size. They are the printed sizes as long as the figure is
+    included at the width it was drawn. ``font_scale`` multiplies them all.
     """
     from cycler import cycler
 
     sns = _sns()
     rc: dict = {}
     rc.update(sns.axes_style("ticks"))
-    rc.update(sns.plotting_context("paper", font_scale=font_scale))
+    rc.update(sns.plotting_context("paper"))
+    base, small = BASE_PT * font_scale, SMALL_PT * font_scale
+    rc.update({
+        "font.size": base,
+        "axes.labelsize": base,
+        "axes.titlesize": base,
+        "figure.titlesize": base,
+        "figure.labelsize": base,
+        "legend.title_fontsize": base,
+        "xtick.labelsize": small,
+        "ytick.labelsize": small,
+        "legend.fontsize": small,
+    })
     rc.update({
         "font.family": "sans-serif",
         "font.sans-serif": list(SANS_SERIF),
@@ -140,7 +161,7 @@ def paper_rc(font_scale: float = 0.9) -> dict:
     return rc
 
 
-def use_paper_style(font_scale: float = 0.9) -> None:
+def use_paper_style(font_scale: float = 1.0) -> None:
     """Apply :func:`paper_rc` globally (for notebooks and one-off plots)."""
     _plt()[0].rcParams.update(paper_rc(font_scale))
 
@@ -163,6 +184,21 @@ def _new_ax(ax, figsize):
         return ax.figure, ax
     fig, ax = plt.subplots(figsize=figsize, layout="constrained")
     return fig, ax
+
+
+def _area_label(a, area_names: dict | None = None) -> str:
+    """``area_names[a]`` if given, else "28 Measure, integration" for an MSC code, else ``str(a)``."""
+    if area_names and a in area_names:
+        return str(area_names[a])
+    from .msc import short_title
+
+    return short_title(a)
+
+
+def _natural_key(x) -> list:
+    import re
+
+    return [(0, int(t), "") if t.isdigit() else (1, 0, t) for t in re.split(r"(\d+)", str(x)) if t]
 
 
 def _blue_cmap():
@@ -253,7 +289,7 @@ def implied_timescales(
     *,
     lag_unit: str = "proof steps",
     ax=None,
-    figsize=(COLUMN_WIDTH, 2.4),
+    figsize=(COLUMN_WIDTH, 2.2),
 ):
     """Implied timescales against lag time.
 
@@ -289,7 +325,7 @@ def implied_timescales(
     sns.lineplot(
         data=long, x="lag", y="timescale", hue="process", hue_order=names,
         palette={nm: color_for(k) for k, nm in enumerate(names)},
-        marker="o", markersize=4, markeredgewidth=0, linewidth=2, ax=ax, legend=n > 1,
+        marker="o", markersize=3.5, markeredgewidth=0, linewidth=1.5, ax=ax, legend=n > 1,
     )
     ax.set_yscale("log")
     positive = ts[np.isfinite(ts) & (ts > 0)]
@@ -298,10 +334,39 @@ def implied_timescales(
     ax.set_xlabel(f"lag $\\tau$ ({lag_unit})")
     ax.set_ylabel(f"implied timescale ({lag_unit})")
     ax.grid(axis="y")
-    if n > 1:  # above the plot, where it cannot sit on a line
-        ax.legend(title=None, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=n,
-                  borderaxespad=0.2, handlelength=1.5, columnspacing=1.0)
+    if n > 1:  # above the plot, where it cannot sit on a line; at most 6 per row so 7 pt fits the column
+        ax.legend(title=None, loc="lower left", bbox_to_anchor=(0, 1.0), ncol=min(n, 6),
+                  borderaxespad=0.2, handlelength=1.2, handletextpad=0.4, columnspacing=0.9,
+                  fontsize=SMALL_PT)
     return fig
+
+
+def _ck_arrays(lags, predicted, estimated, estimated_err, labels):
+    lags = np.asarray(lags, dtype=float)
+    pred = np.asarray(predicted, dtype=float)
+    est = np.asarray(estimated, dtype=float)
+    if pred.shape != est.shape or pred.ndim != 3 or pred.shape[1] != pred.shape[2]:
+        raise ValueError("predicted and estimated must both be (n_lags, m, m)")
+    if pred.shape[0] != lags.size:
+        raise ValueError("one matrix per lag")
+    m = pred.shape[1]
+    labels = list(labels) if labels is not None else [str(i) for i in range(m)]
+    if len(labels) != m:
+        raise ValueError("labels must have one entry per macrostate")
+    err = None if estimated_err is None else np.asarray(estimated_err, float).reshape(pred.shape)
+    return lags, pred, est, err, m, labels
+
+
+def _ck_panel(ax, lags, pred, est, err, i, l) -> None:
+    ax.plot(lags, pred[:, i, l], color=color_for(0), lw=1.2, label="model $T(\\tau)^k$")
+    if err is not None:
+        ax.errorbar(lags, est[:, i, l], yerr=err[:, i, l], fmt="none", ecolor=color_for(1), elinewidth=0.8)
+    ax.plot(lags, est[:, i, l], ls="none", marker="o", ms=2.5, mew=0, color=color_for(1),
+            label="estimate $T(k\\tau)$")
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_yticks([0, 0.5, 1])
+    ax.set_yticklabels(["0", "", "1"])
+    ax.tick_params(length=2, pad=1.5)
 
 
 @_themed
@@ -315,45 +380,72 @@ def chapman_kolmogorov(
     lag_unit: str = "proof steps",
     figsize: tuple[float, float] | None = None,
 ):
-    """Chapman-Kolmogorov test as an ``m x m`` grid.
+    """Chapman-Kolmogorov test as an ``m x m`` grid (the appendix figure).
 
     ``predicted[j]`` is the model's ``T(tau)^k`` and ``estimated[j]`` is
     ``T(k tau)`` estimated directly, both ``(m, m)`` macrostate transition
-    matrices at ``lags[j] = k tau``. Panel ``(i, l)`` shows ``P(i -> l)``.
-    ``estimated_err`` (same shape) draws error bars on the estimate. The
-    default size fits the column up to three macrostates and the full text
-    width beyond that.
+    matrices at ``lags[j] = k tau``. Panel ``(i, l)`` shows the transition probability ``P(i -> l)``;
+    rows are labelled "from" down the left and columns "to" along the top, so
+    the panels carry no text of their own. ``estimated_err`` (same shape)
+    draws error bars on the estimate. The default size is the full text width,
+    for a ``figure*``. :func:`chapman_kolmogorov_diagonal` draws the main-text
+    version at the column width.
     """
-    lags = np.asarray(lags, dtype=float)
-    pred = np.asarray(predicted, dtype=float)
-    est = np.asarray(estimated, dtype=float)
-    if pred.shape != est.shape or pred.ndim != 3 or pred.shape[1] != pred.shape[2]:
-        raise ValueError("predicted and estimated must both be (n_lags, m, m)")
-    if pred.shape[0] != lags.size:
-        raise ValueError("one matrix per lag")
-    m = pred.shape[1]
-    labels = list(labels) if labels is not None else [str(i) for i in range(m)]
-    if len(labels) != m:
-        raise ValueError("labels must have one entry per macrostate")
+    lags, pred, est, err, m, labels = _ck_arrays(lags, predicted, estimated, estimated_err, labels)
     _, plt = _plt()
-    if figsize is None:
-        width = COLUMN_WIDTH if m <= 3 else TEXT_WIDTH
-        figsize = (width, min(width * 0.95, 1.1 * m + 0.7))
+    if figsize is None:  # full text width (the appendix figure*), panels about 0.6 in wide
+        figsize = (TEXT_WIDTH, min(8.5, 0.9 + 0.55 * m))
     fig, axes = plt.subplots(m, m, sharex=True, sharey=True, figsize=figsize, layout="constrained", squeeze=False)
+    fig.get_layout_engine().set(w_pad=0.01, h_pad=0.01, wspace=0.02, hspace=0.02)
     for i in range(m):
         for l in range(m):
             ax = axes[i, l]
-            ax.plot(lags, pred[:, i, l], color=color_for(0), lw=2, label="model $T(\\tau)^k$")
-            if estimated_err is not None:
-                err = np.asarray(estimated_err, float)[:, i, l]
-                ax.errorbar(lags, est[:, i, l], yerr=err, fmt="none", ecolor=color_for(1), elinewidth=1)
-            ax.plot(lags, est[:, i, l], ls="none", marker="o", ms=4, mew=0, color=color_for(1),
-                    label="estimate $T(k\\tau)$")
-            ax.set_ylim(-0.05, 1.05)
-            ax.text(0.95, 0.9, f"{labels[i]}$\\to${labels[l]}", transform=ax.transAxes,
-                    ha="right", va="top", fontsize="small")
-    fig.supxlabel(f"lag $k\\tau$ ({lag_unit})", fontsize="medium")
-    fig.supylabel("transition probability", fontsize="medium")
+            _ck_panel(ax, lags, pred, est, err, i, l)
+            if i == 0:
+                ax.set_title(f"to {labels[l]}", fontsize=SMALL_PT, pad=2)
+            if l == 0:
+                ax.set_ylabel(f"from {labels[i]}", fontsize=SMALL_PT, labelpad=2)
+    # no figure-wide y label: it would sit on the "from" row labels; the caption says what is plotted
+    fig.supxlabel(f"lag $k\\tau$ ({lag_unit})")
+    handles, names = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, names, loc="outside upper center", ncol=2)
+    return fig
+
+
+@_themed
+def chapman_kolmogorov_diagonal(
+    lags: Sequence[float],
+    predicted: np.ndarray,
+    estimated: np.ndarray,
+    estimated_err: np.ndarray | None = None,
+    *,
+    labels: Sequence[str] | None = None,
+    lag_unit: str = "proof steps",
+    ncols: int | None = None,
+    figsize: tuple[float, float] | None = None,
+):
+    """Chapman-Kolmogorov test, stay-in-place panels only: ``P(i -> i)`` for each macrostate.
+
+    The same inputs as :func:`chapman_kolmogorov`, drawn as ``m`` panels in
+    rows of ``ncols`` (default 5) at the column width, for the main text.
+    """
+    lags, pred, est, err, m, labels = _ck_arrays(lags, predicted, estimated, estimated_err, labels)
+    _, plt = _plt()
+    ncols = ncols or min(m, 5)
+    nrows = -(-m // ncols)
+    if figsize is None:
+        figsize = (COLUMN_WIDTH, 0.62 + 0.78 * nrows)
+    fig, axes = plt.subplots(nrows, ncols, sharex=True, sharey=True, figsize=figsize, layout="constrained",
+                             squeeze=False)
+    fig.get_layout_engine().set(w_pad=0.01, h_pad=0.01, wspace=0.02, hspace=0.02)
+    for k, ax in enumerate(axes.flat):
+        if k >= m:
+            ax.set_visible(False)
+            continue
+        _ck_panel(ax, lags, pred, est, err, k, k)
+        ax.set_title(f"{labels[k]}$\\to${labels[k]}", fontsize=SMALL_PT, pad=2)
+    fig.supxlabel(f"lag $k\\tau$ ({lag_unit})")
+    fig.supylabel("P(stay)")
     handles, names = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, names, loc="outside upper center", ncol=2)
     return fig
@@ -364,12 +456,16 @@ def transition_heatmap(
     T: np.ndarray,
     labels: Sequence[str] | None = None,
     *,
-    annotate: bool = True,
+    annotate: bool = False,
     check_stochastic: bool = True,
     ax=None,
-    figsize=(COLUMN_WIDTH, 2.8),
+    figsize=(COLUMN_WIDTH, 2.6),
 ):
-    """Macrostate transition matrix as a heatmap (rows: from, columns: to)."""
+    """Macrostate transition matrix as a heatmap (rows: from, columns: to).
+
+    Cells carry no numbers by default (the colour scale reads them); pass
+    ``annotate=True`` for a small matrix on a slide.
+    """
     sns = _sns()
     T = np.asarray(T, dtype=float)
     if T.ndim != 2 or T.shape[0] != T.shape[1]:
@@ -384,7 +480,7 @@ def transition_heatmap(
     fig, ax = _new_ax(ax, figsize)
     sns.heatmap(
         frame, ax=ax, cmap=_blue_cmap(), vmin=0, vmax=1, square=True,
-        annot=annotate, fmt=".2f", annot_kws={"fontsize": "x-small"},
+        annot=annotate, fmt=".2f", annot_kws={"fontsize": SMALL_PT},
         linewidths=1, linecolor="white", cbar_kws={"shrink": 0.85},
     )
     ax.tick_params(length=0)
@@ -403,8 +499,9 @@ def judge_cluster_confusion(
     show_nmi: bool = False,
     cluster_name: str = "macrostate",
     judge_name: str = "judge MSC",
+    area_names: dict | None = None,
     ax=None,
-    figsize=(COLUMN_WIDTH, 2.8),
+    figsize=(COLUMN_WIDTH, 3.0),
 ):
     """Contingency of macrostates (rows) against judge MSC codes (columns).
 
@@ -415,8 +512,10 @@ def judge_cluster_confusion(
     ``normalize`` is ``"row"`` (each macrostate sums to 1), ``"all"`` or
     ``None`` (raw counts). Pass the ``macrostate`` column of ``assignments``
     and the ``msc`` column of ``labels`` after merging on ``proof_id, step``.
-    ``annotate`` defaults to writing values only when the table has at most
-    64 cells.
+    ``annotate`` defaults to no numbers in the cells (the colour scale reads
+    them). MSC codes on the columns are labelled with their short names
+    (:func:`markov_lean.msc.short_title`); ``area_names`` (code -> label)
+    overrides that, and labels that are not MSC codes are left as they are.
     """
     sns = _sns()
     c = pd.Series(np.asarray(clusters), name=cluster_name)
@@ -429,6 +528,7 @@ def judge_cluster_confusion(
         raise ValueError("no rows with both a cluster and a judge label")
     score = nmi(c.to_numpy(), j.astype(str).to_numpy())
     table = pd.crosstab(c, j)
+    table = table.loc[sorted(table.index, key=_natural_key)]  # M1, M2, ..., M10, not M1, M10, M2
     if normalize == "row":
         shown = table.div(table.sum(axis=1), axis=0)
     elif normalize == "all":
@@ -438,16 +538,17 @@ def judge_cluster_confusion(
     else:
         raise ValueError("normalize must be 'row', 'all' or None")
     if annotate is None:
-        annotate = shown.size <= 64
+        annotate = False
     shown.index = shown.index.map(str)
-    shown.columns = shown.columns.map(str)
+    shown.columns = shown.columns.map(lambda a: _area_label(a, area_names))
     vmax = 1.0 if normalize else max(float(shown.to_numpy().max()), 1.0)
     fig, ax = _new_ax(ax, figsize)
     sns.heatmap(
         shown, ax=ax, cmap=_blue_cmap(), vmin=0, vmax=vmax,
-        annot=annotate, fmt=".2f" if normalize else ".0f", annot_kws={"fontsize": "xx-small"},
-        linewidths=1, linecolor="white", cbar_kws={"shrink": 0.85},
+        annot=annotate, fmt=".2f" if normalize else ".0f", annot_kws={"fontsize": SMALL_PT},
+        linewidths=0.5, linecolor="white", cbar_kws={"shrink": 0.85}, xticklabels=1, yticklabels=1,
     )
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90)
     ax.set_xlabel(judge_name)
     ax.set_ylabel(cluster_name)
     if show_nmi:
@@ -476,7 +577,10 @@ def area_flow(
     :func:`area_transitions`). Only the ``top`` largest flows are drawn. For
     the caption, ``fig.flows_shown``, ``fig.moves_shown`` and ``fig.moves_total``
     say how much of the table that covers; ``show_summary=True`` also writes it
-    above the plot. Band color follows the source area.
+    above the plot. Band color follows the source area. Areas that are MSC
+    codes are labelled "code short name" (:func:`markov_lean.msc.short_title`);
+    ``area_names`` (area -> label) overrides that, and other labels such as
+    macrostates are left as they are.
     seaborn has no flow plot, so this one is drawn with matplotlib patches in
     the same style.
     """
@@ -494,7 +598,6 @@ def area_flow(
     if top is not None:
         df = df.head(top)
     shown = float(df["count"].sum())
-    names = area_names or {}
     # a stable area order (and so a stable color) from the full table, not the cut
     order = sorted(set(transitions["from_area"]) | set(transitions["to_area"]), key=lambda x: str(x))
     color = {a: color_for(i) for i, a in enumerate(order)}
@@ -514,13 +617,13 @@ def area_flow(
     left, scale = stack("from_area")
     right, _ = stack("to_area")
     fig, ax = _new_ax(ax, figsize)
-    xl, xr, w = 0.0, 1.0, 0.06
+    xl, xr, w = 0.0, 1.0, 0.05
     for a, (b, t, _) in left.items():
         ax.add_patch(Rectangle((xl - w, b), w, t - b, color=color[a], lw=0))
-        ax.text(xl - w - 0.02, (b + t) / 2, str(names.get(a, a)), ha="right", va="center", fontsize="small")
+        ax.text(xl - w - 0.02, (b + t) / 2, _area_label(a, area_names), ha="right", va="center", fontsize=SMALL_PT)
     for a, (b, t, _) in right.items():
         ax.add_patch(Rectangle((xr, b), w, t - b, color=color[a], lw=0))
-        ax.text(xr + w + 0.02, (b + t) / 2, str(names.get(a, a)), ha="left", va="center", fontsize="small")
+        ax.text(xr + w + 0.02, (b + t) / 2, _area_label(a, area_names), ha="left", va="center", fontsize=SMALL_PT)
     for _, row in df.iterrows():
         h = row["count"] * scale
         lt = left[row["from_area"]][2]
@@ -535,14 +638,14 @@ def area_flow(
         codes = [MPath.MOVETO, MPath.CURVE4, MPath.CURVE4, MPath.CURVE4,
                  MPath.LINETO, MPath.CURVE4, MPath.CURVE4, MPath.CURVE4, MPath.CLOSEPOLY]
         ax.add_patch(PathPatch(MPath(verts, codes), facecolor=color[row["from_area"]], alpha=0.35, lw=0))
-    ax.set_xlim(-0.35, 1.35)
+    ax.set_xlim(-0.62, 1.62)  # room for "28 Measure, integration" at 7 pt on both sides
     ax.set_ylim(-0.08, 1.02)
     ax.axis("off")
-    ax.text(xl - w / 2, -0.03, "from", ha="center", va="top", fontsize="small", color=TEXT_SECONDARY)
-    ax.text(xr + w / 2, -0.03, "to", ha="center", va="top", fontsize="small", color=TEXT_SECONDARY)
+    ax.text(xl - w / 2, -0.03, "from", ha="center", va="top", fontsize=SMALL_PT, color=TEXT_SECONDARY)
+    ax.text(xr + w / 2, -0.03, "to", ha="center", va="top", fontsize=SMALL_PT, color=TEXT_SECONDARY)
     if show_summary:
         ax.set_title(f"top {len(df)} flows, {shown / total:.0%} of {int(total)} moves", loc="left",
-                     fontsize="small", color=TEXT_SECONDARY)
+                     fontsize=SMALL_PT, color=TEXT_SECONDARY)
     fig.flows_shown, fig.moves_shown, fig.moves_total = len(df), int(shown), int(total)
     return fig
 
@@ -625,7 +728,9 @@ def save_pdf(fig, path: str | Path, **kwargs) -> Path:
     if path.suffix.lower() != ".pdf":
         path = path.with_suffix(".pdf")
     path.parent.mkdir(parents=True, exist_ok=True)
-    kwargs.setdefault("bbox_inches", "tight")
+    # No tight cropping: the figure is included at the width it was drawn, so
+    # cropping would rescale it and its text. constrained layout already fits
+    # every label inside the figure.
     matplotlib, _ = _plt()
     # Font families resolve when the figure is drawn, so save under the paper's
     # font settings too; otherwise text falls back to the global default font.

@@ -14,4 +14,18 @@ Message Batches API with a spending cap of \$85 per submission.
 \todo{commit hash, total judge cost, total GPU hours; a release of the code
 that does not identify the author goes in the supplementary material.}
 
+\section{Model checks}
+\label{app:checks}
+% DRAFT (Claude): awaits the author's rewrite.
+
+\begin{figure*}[t]
+  \centering
+  \maybefigure{chapman_kolmogorov}{\textwidth}
+  \caption{Chapman--Kolmogorov test for every pair of macrostates: panel
+  (row $i$, column $j$) is the probability of moving from $i$ to $j$. Lines
+  show the model's prediction $\T(\lag)^k$; points show $\T(k\lag)$
+  estimated directly from the data, with bootstrap error bars.}
+  \label{fig:ck-full}
+\end{figure*}
+
 \input{sections/case_studies}

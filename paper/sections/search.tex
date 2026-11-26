@@ -58,14 +58,18 @@ chosen (validation split only).}
   \end{algorithmic}
 \end{algorithm}
 
+% Shown only once `markov-lean paper` has written figures/search_ablation.pdf,
+% which it does when a search run has the area-prior condition (one bar says
+% nothing). No synthetic preview stands in for it.
+\IfFileExists{figures/search_ablation.pdf}{%
 \begin{figure}[t]
   \centering
-  \maybefigure{search_ablation}{0.6\linewidth}
+  \maybefigure{search_ablation}{\columnwidth}
   \caption{Problems solved under the same budget with the language-model
   prior alone and with the area prior. Error bars are 95\% bootstrap
   intervals over problems.}
   \label{fig:search}
-\end{figure}
+\end{figure}}{}
 
 \paragraph{Ablations.}
 \todo{each factor of $g$ turned on alone, then all three together; $\lambda \in \{0, 0.1, 0.3,
