@@ -76,12 +76,50 @@ Each extraction needs about 12 GB while it builds and gives it back at its end (
 once after a failure). One project alone: `bash scripts/case_extract.sh configs/cases/pnt.yaml`
 (`--status` shows its steps, `--clean` frees its build files).
 
-Rough judge cost after Dec 1, scaled from PFR ($8.24 for 861 proofs): sphere packing about
-$4, PNT+ about $17, Carleson about $20. Submit each with `--max-dollars`:
+## Exact extraction results (Nov 27, Mac)
+
+Free labels from the exact extraction (`results/cases/<name>/summary.json`); judge cost from
+stage 5 (Message Batches, heuristic token counts):
+
+| case | proofs | steps | modules | premise_area switches/move | has switch | premise_own_area | judge estimate |
+|---|---|---|---|---|---|---|---|
+| Sphere packing | 784 | 6,159 | 64 | 0.560 | 51.0% | | $4.78 |
+| PNT+ | 1,644 | 26,791 | 92 | 0.497 | 60.0% | 0.517 | $13.51 |
+| Carleson (control) | 2,153 | 32,510 | 117 | 0.500 | 56.0% | 0.525 | $17.98 |
+
+PNT+ leaves out `Mathlib/NumberTheory/Chebyshev.lean`, which needs a lemma newer than its
+Mathlib pin and which nothing in the project imports. As with the source proxy, the control
+switches about as often as the cross-area projects on premise labels, so the judges decide.
+
+## Judge plan (after Dec 1)
+
+About $36 in all by the estimates. Each submit is capped about 30% above its estimate, so the
+most it can spend is $49 ($7 + $18 + $24); the config's $85 per submit cap stays as the outer
+limit. Run them one at a time, cheapest first, and compare each one's real cost in the
+Anthropic console with its estimate before submitting the next. The judges are API calls
+only, so they don't compete with a search running on the Mac.
 
 ```
-.venv/bin/python -m markov_lean.judge submit --steps results/cases/pnt/steps.parquet --out results/cases/pnt/api --max-dollars 20
+cd ~/markov-lean
+for c in sphere_packing:7 pnt:18 carleson:24; do
+  n=${c%:*}; cap=${c#*:}
+  .venv/bin/python -m markov_lean.judge submit --steps results/cases/$n/steps.parquet \
+    --out results/cases/$n/api --max-dollars $cap --dry-run      # writes requests, spends nothing
+done
+# then, one case at a time (sphere_packing, then pnt, then carleson):
+n=sphere_packing; cap=7
+.venv/bin/python -m markov_lean.judge submit --steps results/cases/$n/steps.parquet --out results/cases/$n/api --max-dollars $cap
+.venv/bin/python -m markov_lean.judge collect --out results/cases/$n/api
+.venv/bin/python -m markov_lean.judge agree --labels results/cases/$n/api/labels.parquet
+.venv/bin/python -m markov_lean.cli switches --run results/cases/$n --steps results/cases/$n/steps.parquet \
+  --labels results/cases/$n/api/labels.parquet --sources judge --out results/cases/$n/switches \
+  --markov-group none --pooled-within all --no-figures
 ```
+
+`--markov-group none --pooled-within all` as for PFR, since the case steps have no Mathlib
+folder. The comparison is each case's switches per move against its own shuffle: Mathlib
+pilot 0.115 vs 0.162 (ratio 0.71), PFR 0.242 vs 0.352 (0.69). The cross-area claim needs
+sphere packing and PNT+ to switch more than the Carleson control on judge labels.
 
 Rerun the source proxy (here or on the Mac; needs a mathlib4 checkout and the projects):
 
