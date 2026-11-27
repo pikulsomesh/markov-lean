@@ -557,6 +557,7 @@ def test_mac_search_run_draws_figure_5(tmp_path, paper_dir):
     assert v["resSearchExpansions"] == "12" and v["resSearchWallTime"] == "180"
     assert v["resSearchProblemsMiniF"] == "20" and v["resSearchStatementErrorsMiniF"] == "2"
     assert v["resSearchStatementErrorsSomeMiniF"] == "0" and v["resSearchGainElabMiniF"] == "$+0.0$~points"
+    assert v["resSearchSharedMiniF"] == "20"
     assert v["resSearchGainPutnam"] == r"\tbd"  # no Putnam run
     rows = (paper_dir / "figures" / "table_search.tex").read_text()
     assert "dynamics term only ($\\lambda = 0.3$) & 40.0" in rows and "Random scores" in rows
@@ -575,6 +576,26 @@ def test_statement_errors_split_every_condition_from_some(tmp_path, paper_dir):
     assert v["resSearchGainMiniF"] == "$-5.0$~points"  # 6/20 vs 7/20 counting the timeout as a failure
     assert v["resSearchGainElabMiniF"] == "$+0.0$~points"  # 17 problems without one under lm or area: 7 solved each
     assert v["resSearchGainElabLoMiniF"].startswith("$-") and v["resSearchGainElabHiMiniF"].startswith("$+")
+
+
+def test_gain_uses_problems_both_conditions_ran(tmp_path, paper_dir):
+    """A partial run (the area prior has not reached the last problem yet) compares the shared problems only:
+    1 of 28 against 1 of 27 is not a gain."""
+    runs = tmp_path / "results" / "mac_overnight"
+    for cond, n in (("lm", 28), ("area_l0.3", 27)):
+        d = runs / "putnam" / cond / "seed0"
+        d.mkdir(parents=True)
+        lines = [json.dumps({"proof_id": f"putnam:p{i}", "solved": i == 0,
+                             "stop_reason": "solved" if i == 0 else "budget", "expansions": 12, "elapsed": 9.0})
+                 for i in range(n)]
+        (d / "summary.jsonl").write_text("\n".join(lines) + "\n")
+    P.run(runs.parent, paper_dir, verbose=False)
+    v = macros(paper_dir / "figures" / "results_macros.tex")
+    assert v["resSearchSharedPutnam"] == "27"
+    assert v["resSearchBasePutnam"] == "3.7" and v["resSearchAreaPutnam"] == "3.7"
+    assert v["resSearchGainPutnam"] == "$+0.0$~points"
+    rows = (paper_dir / "figures" / "table_search.tex").read_text()
+    assert "& 3.6 \\\\" in rows  # Table 3 keeps each condition's own problems
 
 
 def test_named_area_condition_that_did_not_run_withholds(tmp_path, paper_dir):

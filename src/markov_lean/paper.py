@@ -175,6 +175,8 @@ MACROS["resSearchWallTime"] = "search budget: wall time per problem, in seconds"
 
 def search_macro_names(bench: str, sfx: str) -> dict[str, str]:
     return {
+        f"resSearchShared{sfx}": f"{bench}: problems both the LM prior and the area prior ran (base, area and "
+                                 "gain are over these)",
         f"resSearchBase{sfx}": f"{bench}: problems solved (%) with the LM prior alone",
         f"resSearchArea{sfx}": f"{bench}: problems solved (%) with the area prior",
         f"resSearchGain{sfx}": f"{bench}: change in problems solved, area prior minus LM prior, in points",
@@ -1110,19 +1112,24 @@ def _build_search(src: Sources, b: Build, data_rows: dict, main_condition: str, 
         every, some = _statement_error_split(sub)
         b.macros[f"resSearchStatementErrors{sfx}"] = (tex_int(len(every)), rel)
         b.macros[f"resSearchStatementErrorsSome{sfx}"] = (tex_int(len(some)), rel)
-        base = t["pass@1"].get((bench, baseline), np.nan) if "pass@1" in t.columns else np.nan
-        val = t["pass@1"].get((bench, area), np.nan) if area and "pass@1" in t.columns else np.nan
+        # Base, area and gain on the problems both conditions ran, so a partial run compares like with like;
+        # with no area run yet, the base rate is the LM condition's own pass@1.
+        r = pair.loc[(bench, area)] if area and (bench, area) in pair.index else None
+        if r is not None and r["n_common"] > 0:
+            base, val = r["rate_base"], r["rate_cond"]
+            b.macros[f"resSearchShared{sfx}"] = (tex_int(r["n_common"]), rel)
+        else:
+            base = t["pass@1"].get((bench, baseline), np.nan) if "pass@1" in t.columns else np.nan
+            val = np.nan
         if _finite(base):
             b.macros[f"resSearchBase{sfx}"] = (tex_num(100 * base, 1), rel)
         if _finite(val):
             b.macros[f"resSearchArea{sfx}"] = (tex_num(100 * val, 1), rel)
         if _finite(base) and _finite(val):
             b.macros[f"resSearchGain{sfx}"] = (tex_signed(100 * (val - base)), rel)
-        if area and (bench, area) in pair.index:
-            r = pair.loc[(bench, area)]
-            if _finite(r["diff_lo"]) and _finite(r["diff_hi"]):
-                b.macros[f"resSearchGainLo{sfx}"] = (tex_signed(100 * r["diff_lo"], unit="").rstrip("~"), rel)
-                b.macros[f"resSearchGainHi{sfx}"] = (tex_signed(100 * r["diff_hi"], unit="").rstrip("~"), rel)
+        if r is not None and _finite(r["diff_lo"]) and _finite(r["diff_hi"]):
+            b.macros[f"resSearchGainLo{sfx}"] = (tex_signed(100 * r["diff_lo"], unit="").rstrip("~"), rel)
+            b.macros[f"resSearchGainHi{sfx}"] = (tex_signed(100 * r["diff_hi"], unit="").rstrip("~"), rel)
         if area and {baseline, area} <= set(sub["condition"]):
             two = sub[sub["condition"].isin([baseline, area])]
             bad = set(two.loc[_statement_error(two), "proof_id"])
