@@ -5,6 +5,7 @@
 #
 #   bash scripts/case_extract.sh configs/cases/pnt.yaml            # all stages; resumes where it stopped
 #   bash scripts/case_extract.sh configs/cases/pnt.yaml --status   # what is done
+#   bash scripts/case_extract.sh configs/cases/pnt.yaml --clean    # free its build files (after a failure)
 #
 # Stages: 1 clone the project at the config's pinned commit and fetch its Mathlib's prebuilt cache;
 # 2 `lake build` the included modules only (Mathlib comes from the cache);
@@ -28,7 +29,7 @@
 # lock counts, so a long search ahead of it must not use it up).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-CONFIG=${1:?usage: bash scripts/case_extract.sh configs/cases/<name>.yaml [--status]}
+CONFIG=${1:?usage: bash scripts/case_extract.sh configs/cases/<name>.yaml [--status | --clean]}
 [ -f "$CONFIG" ] || { echo "no such config: $CONFIG"; exit 1; }
 CONFIG=$(cd "$(dirname "$CONFIG")" && pwd)/$(basename "$CONFIG")
 PY=${PY:-$ROOT/.venv/bin/python}
@@ -59,7 +60,33 @@ need_disk() {  # gb dir what
 
 if [ "${2:-}" = "--status" ]; then
   for i in 1 2 3 4 5 6; do is_done "$i" && echo "stage $i done $(cat "$STATE/stage$i.done")" || echo "stage $i not done"; done
-  [ -d "$OUT/raw" ] && echo "extracted modules: $(ls "$OUT/raw" | grep -c '\.jsonl$' || true) of $(files | wc -l | tr -d ' ')"
+  for g in build extract; do
+    [ -f "$STATE/${g}_guard.json" ] && echo "$g guard: $("$PY" -m markov_lean.mac_guard --status --state "$STATE/${g}_guard.json" | head -1)"
+  done
+  if [ -d "$OUT/raw" ] && [ -d "$CASE_DIR" ]; then
+    echo "extracted modules: $(ls "$OUT/raw" | grep -c '\.jsonl$' || true) of $(files | wc -l | tr -d ' ')"
+    [ -s "$OUT/raw/failed.txt" ] && echo "modules that failed to extract: $(wc -l < "$OUT/raw/failed.txt" | tr -d ' ')"
+  fi
+  exit 0
+fi
+
+clean() {  # stage 6: delete what stage 1 added; results/cases/<name> stays
+  local before; before=$(free_gb "$HOME")
+  rm -rf "$CASE_DIR/.lake"
+  if [ -f "$STATE/mathlib_cache_before.txt" ] && [ -d "$MATHLIB_CACHE" ]; then
+    # only the cache files stage 1 downloaded; markov-lean's own Mathlib files stay
+    (cd "$MATHLIB_CACHE" && ls | grep -vxF -f "$STATE/mathlib_cache_before.txt" | while IFS= read -r f; do rm -f -- "$f"; done) || true
+  fi
+  if [ "$(cat "$STATE/toolchain_before" 2>/dev/null)" = new ]; then elan toolchain uninstall "$(cat "$STATE/toolchain")" || true; fi
+  say "freed about $(( $(free_gb "$HOME") - before )) GB"
+}
+
+if [ "${2:-}" = "--clean" ]; then
+  # after a failure: free the build files now (the next project needs the disk). A rerun
+  # starts again from stage 1, keeping the steps already extracted to results/cases/<name>/raw.
+  say "removing $NAME's build files after a failure (results/cases/$NAME stays)"
+  clean
+  rm -f "$STATE"/stage1.done "$STATE"/stage2.done
   exit 0
 fi
 
@@ -74,8 +101,14 @@ if [ "${2:-}" = "--inner" ]; then
         local f=$1 mod
         mod=$(printf '%s' "${f%.lean}" | tr '/' '.')
         [ -f "$OUT/raw/$mod.jsonl" ] && return 0
-        lake env lean --run "$EXTRACT" "$f" "$mod" "$OUT/raw/$mod.jsonl.tmp" && mv "$OUT/raw/$mod.jsonl.tmp" "$OUT/raw/$mod.jsonl"
+        if lake env lean --run "$EXTRACT" "$f" "$mod" "$OUT/raw/$mod.jsonl.tmp"; then
+          mv "$OUT/raw/$mod.jsonl.tmp" "$OUT/raw/$mod.jsonl"
+        else  # one bad file does not stop the others; the list is retried on a rerun
+          rm -f "$OUT/raw/$mod.jsonl.tmp"; echo "$f" >> "$OUT/raw/failed.txt"
+        fi
+        return 0
       }
+      rm -f "$OUT/raw/failed.txt"
       export -f one; export OUT EXTRACT
       files | xargs -P "$JOBS" -I{} bash -c 'one "$@"' _ {} ;;
   esac
@@ -90,8 +123,15 @@ guarded() {  # name -- command...
     --cooldown "${COOLDOWN:-120}" --poll "${POLL:-10}" -- "$@"
 }
 
+# the guard also exits 0 when its HOURS run out; only "done" in its state means the job finished
+guard_done() {  # name
+  "$PY" -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("status") == "done" else 1)' \
+    "$STATE/$1_guard.json" 2>/dev/null
+}
+stopped_early() { say "stage $1 stopped at its time limit (HOURS=${HOURS:-168}) with work left; rerun to resume"; exit 0; }
+
 mkdir -p "$STATE"
-if ! is_done 1; then
+if ! is_done 1 && ! is_done 3; then   # once the steps are extracted, no build is needed
   need_disk "${MIN_DISK_GB:-15}" "$HOME" "stage 1 ($NAME, its Mathlib and their prebuilt files)"
   say "stage 1: $REPO at ${REV:0:7} and its Mathlib cache"
   if [ ! -d "$CASE_DIR/.git" ]; then mkdir -p "$(dirname "$CASE_DIR")"; git clone "$REPO" "$CASE_DIR"; fi
@@ -104,14 +144,16 @@ if ! is_done 1; then
   (cd "$CASE_DIR" && lake exe cache get)
   done_mark 1
 fi
-is_done 2 || need_disk 2 "$CASE_DIR" "stage 2 (building $NAME)"
+is_done 2 || is_done 3 || need_disk 2 "$CASE_DIR" "stage 2 (building $NAME)"
 is_done 3 || need_disk 1 "$OUT" "stage 3 (extracted steps)"
-if ! is_done 2; then say "stage 2: lake build of $(files | wc -l | tr -d ' ') modules (guarded)"; guarded build -- bash "$0" "$CONFIG" --inner build; done_mark 2; fi
+if ! is_done 2 && ! is_done 3; then say "stage 2: lake build of $(files | wc -l | tr -d ' ') modules (guarded)"; guarded build -- bash "$0" "$CONFIG" --inner build; guard_done build || stopped_early 2; done_mark 2; fi
 if ! is_done 3; then
   say "stage 3: extracting steps from $(files | wc -l | tr -d ' ') files, $JOBS at a time (guarded)"
   guarded extract -- bash "$0" "$CONFIG" --inner extract
+  guard_done extract || stopped_early 3
   n=$(files | wc -l | tr -d ' '); got=$(ls "$OUT/raw" | grep -c '\.jsonl$' || true)
-  [ "$got" -eq "$n" ] || { say "only $got of $n modules extracted; rerun to resume"; exit 1; }
+  [ "$got" -gt 0 ] || { say "no module was extracted; see the log above"; exit 1; }
+  [ "$got" -eq "$n" ] || say "$((n - got)) of $n modules failed to extract (listed in $OUT/raw/failed.txt); going on with $got"
   done_mark 3
 fi
 if ! is_done 4; then
@@ -120,18 +162,14 @@ if ! is_done 4; then
   done_mark 4
 fi
 say "stage 5: judge cost estimate (spends nothing)"
-env -u ANTHROPIC_API_KEY "$PY" -m markov_lean.judge estimate --steps "$OUT/steps.parquet" | tee "$OUT/estimate.txt"
-done_mark 5
+if env -u ANTHROPIC_API_KEY "$PY" -m markov_lean.judge estimate --steps "$OUT/steps.parquet" > "$OUT/estimate.txt" 2>&1; then
+  cat "$OUT/estimate.txt"; done_mark 5
+else
+  say "the estimate failed (see $OUT/estimate.txt); the steps are saved, so this does not stop the run"
+fi
 if ! is_done 6 && [ "${KEEP_BUILD:-0}" != 1 ]; then
   say "stage 6: removing $NAME's build files (results/cases/$NAME stays)"
-  before=$(free_gb "$HOME")
-  rm -rf "$CASE_DIR/.lake"
-  if [ -f "$STATE/mathlib_cache_before.txt" ] && [ -d "$MATHLIB_CACHE" ]; then
-    # only the cache files stage 1 downloaded; markov-lean's own Mathlib files stay
-    (cd "$MATHLIB_CACHE" && ls | grep -vxF -f "$STATE/mathlib_cache_before.txt" | while IFS= read -r f; do rm -f -- "$f"; done) || true
-  fi
-  if [ "$(cat "$STATE/toolchain_before" 2>/dev/null)" = new ]; then elan toolchain uninstall "$(cat "$STATE/toolchain")" || true; fi
-  say "freed about $(( $(free_gb "$HOME") - before )) GB"
+  clean
   done_mark 6
 fi
 say "done. Send Claude: $OUT/summary.json and $OUT/estimate.txt"

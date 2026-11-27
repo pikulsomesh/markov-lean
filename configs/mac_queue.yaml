@@ -1,0 +1,61 @@
+# The Mac Mini's run queue: every stage runs alone, in this order, over several days.
+# Start, watch and fix it with scripts/mac_queue.sh (docs/mac_queue.md). Stages:
+#   1  wait for the PutnamBench search started on Nov 26 to end (it is not restarted here)
+#   2  sphere packing in dimension 8: build and extract steps (~12 GB while it runs, freed after)
+#   3  PNT+: the same
+#   4  Carleson (the within-area control): the same
+#   5  the 64-expansion miniF2F search (about 90 h plus pauses for runner jobs, about 1 GB)
+# Stages 2 to 5 each wait for stage 1, so nothing starts next to the Putnam run; they do not
+# depend on each other, so one failing does not stop the next. Every stage keeps its own memory
+# guard (it stops while a GitHub runner job is active or memory is short, then resumes), and
+# none can spend money: API and AWS credentials are removed from each stage's environment.
+#
+# A stage: name, title, run (a bash command from the repository root) or wait_for (all these
+# strings in one process's command line), status (shown by --status while it is current),
+# done_when (paths that must exist, or {glob, files, rows}), on_fail (runs after a failure),
+# env, after (earlier stages that must be done or skipped), min_disk_gb, max_hours (wait only).
+dir: results/mac_queue
+
+stages:
+  - name: putnam_wait
+    title: Wait for the PutnamBench search to end
+    wait_for: ["markov_lean.", "--benchmark putnam"]
+    max_hours: 96
+    status: BENCHMARK=putnam bash scripts/mac_overnight.sh --status
+
+  - name: sphere_packing
+    title: Sphere packing (dimension 8), build and extract steps
+    run: bash scripts/case_extract.sh configs/cases/sphere_packing.yaml
+    status: bash scripts/case_extract.sh configs/cases/sphere_packing.yaml --status
+    done_when: [results/cases/sphere_packing/state/stage4.done, results/cases/sphere_packing/summary.json]
+    on_fail: bash scripts/case_extract.sh configs/cases/sphere_packing.yaml --clean
+    after: [putnam_wait]
+    min_disk_gb: 15
+
+  - name: pnt
+    title: Prime Number Theorem and more, build and extract steps
+    run: bash scripts/case_extract.sh configs/cases/pnt.yaml
+    status: bash scripts/case_extract.sh configs/cases/pnt.yaml --status
+    done_when: [results/cases/pnt/state/stage4.done, results/cases/pnt/summary.json]
+    on_fail: bash scripts/case_extract.sh configs/cases/pnt.yaml --clean
+    after: [putnam_wait]
+    min_disk_gb: 15
+
+  - name: carleson
+    title: Carleson's theorem (control), build and extract steps
+    run: bash scripts/case_extract.sh configs/cases/carleson.yaml
+    status: bash scripts/case_extract.sh configs/cases/carleson.yaml --status
+    done_when: [results/cases/carleson/state/stage4.done, results/cases/carleson/summary.json]
+    on_fail: bash scripts/case_extract.sh configs/cases/carleson.yaml --clean
+    after: [putnam_wait]
+    min_disk_gb: 15
+
+  - name: minif2f_b64
+    title: miniF2F search at 64 expansions, 3 conditions
+    run: bash scripts/mac_overnight.sh
+    env: {CONFIG: configs/search_eval_mac_b64.yaml, OUT: results/mac_overnight_b64, HOURS: "168"}
+    status: bash scripts/mac_overnight.sh --status
+    done_when:
+      - {glob: "results/mac_overnight_b64/minif2f/*/seed0/summary.jsonl", files: 3, rows: 244}
+    after: [putnam_wait]
+    min_disk_gb: 3

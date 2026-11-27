@@ -63,23 +63,18 @@ judge labels, which read what a step is about, are the test that can.
 
 ## Mac commands
 
-Each run needs about 12 GB while it builds and gives it back at the end (stage 6), so run the
-projects one after another. The build and extraction stages hold the same guard lock as the
-search, so they never run side by side with it (both together would not fit in 16 GB), and they
-yield to runner jobs. Run the extractions first and the 64-expansion search after them, in one
-chain, so the search cannot take the lock between two projects and hold it for days:
+The three extractions run in the Mac run queue (`docs/mac_queue.md`), one after another, after
+the Putnam search ends and before the 64-expansion miniF2F search:
 
 ```
 cd ~/markov-lean && git pull
-bash scripts/case_extract.sh configs/cases/sphere_packing.yaml && \
-bash scripts/case_extract.sh configs/cases/pnt.yaml && \
-bash scripts/case_extract.sh configs/cases/carleson.yaml && \
-CONFIG=configs/search_eval_mac_b64.yaml OUT=results/mac_overnight_b64 HOURS=168 scripts/mac_overnight.sh
-bash scripts/case_extract.sh configs/cases/pnt.yaml --status
+scripts/mac_queue.sh            # start
+scripts/mac_queue.sh --status   # check
 ```
 
-A case started behind a running search waits for its lock; that wait counts toward `HOURS`
-(default 168 per stage), so it outlasts a 4-day search.
+Each extraction needs about 12 GB while it builds and gives it back at its end (stage 6, or at
+once after a failure). One project alone: `bash scripts/case_extract.sh configs/cases/pnt.yaml`
+(`--status` shows its steps, `--clean` frees its build files).
 
 Rough judge cost after Dec 1, scaled from PFR ($8.24 for 861 proofs): sphere packing about
 $4, PNT+ about $17, Carleson about $20. Submit each with `--max-dollars`:
