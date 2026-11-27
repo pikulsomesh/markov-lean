@@ -287,9 +287,11 @@ runs it under `markov_lean.mac_guard`, which gives that memory back on its own:
 
 * it stops the search cleanly (as Ctrl-C would) when a runner job starts (a `Runner.Worker`
   process; the always-on `Runner.Listener` doesn't count), when macOS memory pressure reaches
-  *warn*, when available memory falls under `MIN_FREE_GB` (1) or when swap grows by more than
+  *critical*, when available memory falls under `MIN_FREE_GB` (1) or when swap grows by more than
   `MAX_SWAP_GROWTH_GB` (1.5) since the search started. Stopping, not pausing, is what frees the
-  memory. The problem in flight is lost and rerun; finished problems are kept.
+  memory. The problem in flight is lost and rerun; finished problems are kept. Pressure *warn*
+  alone does not stop it: with the prover loaded the Mac sits at *warn* with about 2 GB available
+  and no swap, and stopping there made the search unload, restart and stop again without progress.
 * it starts the search again once no runner job has run for `COOLDOWN` seconds (120), pressure is
   normal and `RESUME_FREE_GB` (4) is available. Until then it waits and says why, in the log and in
   `--status`.

@@ -97,7 +97,12 @@ def test_policy_stops_and_waits_for_the_right_reasons():
     lim = mg.Limits(min_free_gb=1.0, resume_free_gb=10.0, max_swap_growth_gb=1.5)
     assert mg.stop_reason(IDLE, lim, 0.5) is None
     assert "runner" in mg.stop_reason(BUSY, lim, 0.5)
-    assert "pressure" in mg.stop_reason(mg.Snapshot(12.0, 0.5, 2, False), lim, 0.5)
+    assert mg.stop_reason(mg.Snapshot(2.0, 0.0, 2, False), lim, 0.0) is None   # warn alone runs on
+    assert "pressure" in mg.stop_reason(mg.Snapshot(2.0, 0.0, 4, False), lim, 0.0)   # critical stops
+    assert "runner" in mg.stop_reason(mg.Snapshot(2.0, 0.0, 2, True), lim, 0.0)   # a runner job still stops it
+    strict = mg.Limits(min_free_gb=1.0, resume_free_gb=10.0, max_swap_growth_gb=1.5, max_pressure=1)
+    assert "pressure" in mg.stop_reason(mg.Snapshot(12.0, 0.5, 2, False), strict, 0.5)   # the old behaviour
+    assert "pressure" in mg.wait_reason(mg.Snapshot(12.0, 0.5, 2, False), lim)   # but it starts only at normal
     assert "available" in mg.stop_reason(mg.Snapshot(0.8, 0.5, 1, False), lim, 0.5)
     assert "swap" in mg.stop_reason(mg.Snapshot(5.0, 2.5, 1, False), lim, 0.5)
     assert mg.stop_reason(mg.Snapshot(5.0, 2.5, 1, False), lim, 2.0) is None   # old swap is not growth
@@ -143,7 +148,7 @@ def test_cooldown_holds_the_restart(job, tmp_path):
     assert time.monotonic() - t >= 0.6 and (work / "start_2").exists()
 
 
-@pytest.mark.parametrize("bad", [mg.Snapshot(12.0, 0.5, 2, False), mg.Snapshot(0.5, 0.5, 1, False),
+@pytest.mark.parametrize("bad", [mg.Snapshot(12.0, 0.5, 4, False), mg.Snapshot(0.5, 0.5, 1, False),
                                  mg.Snapshot(12.0, 3.0, 1, False)], ids=["pressure", "low memory", "swap"])
 def test_memory_trouble_stops_the_job(job, tmp_path, bad):
     cmd, work = job
@@ -151,6 +156,23 @@ def test_memory_trouble_stops_the_job(job, tmp_path, bad):
     assert g.run() == 0
     assert (work / "stopped_1").exists() and (work / "start_2").exists()
     assert g.state.yields == 1
+
+
+def test_steady_warn_with_the_model_loaded_does_not_stop_the_job(job, tmp_path):
+    # the Nov 27 Putnam loop: warn, ~2 GB available, no swap, no runner job, for hours
+    cmd, work = job
+    warn = mg.Snapshot(available_gb=1.6, swap_used_gb=0.0, pressure=2, runner_busy=False)
+    busy = mg.Snapshot(available_gb=1.6, swap_used_gb=0.0, pressure=2, runner_busy=True)
+    g, lines = _guard(cmd, Probes((IDLE, 2), (warn, 30), (busy, 10_000)), tmp_path, hours=0.001)   # ~4 s
+    assert g.run() == 0
+    assert g.state.starts == 1 and g.state.yields == 1   # ran through warn, stopped once for the runner
+    assert any("runner job started" in l for l in lines)
+    assert not any("memory pressure level" in l for l in lines)
+
+
+def test_the_cli_passes_max_pressure_on():
+    assert mg.build_parser().parse_args(["--", "true"]).max_pressure == 2
+    assert mg.build_parser().parse_args(["--max-pressure", "1", "--", "true"]).max_pressure == 1
 
 
 def test_a_job_that_ignores_ctrl_c_is_terminated_then_killed(job, tmp_path, monkeypatch):
