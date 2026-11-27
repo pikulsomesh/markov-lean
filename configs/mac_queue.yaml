@@ -5,7 +5,9 @@
 #   3  PNT+: the same
 #   4  Carleson (the within-area control): the same
 #   5  the 64-expansion miniF2F search (about 90 h plus pauses for runner jobs, about 1 GB)
-# Stages 2 to 5 each wait for stage 1, so nothing starts next to the Putnam run; they do not
+#   6  the judge-context control: the local Qwen judge labels 300 proofs with their steps in order
+#      and shuffled, then compares switching (about 4 to 7 h, about 7 GB of memory, no API call)
+# Stages 2 to 6 each wait for stage 1, so nothing starts next to the Putnam run; they do not
 # depend on each other, so one failing does not stop the next. Every stage keeps its own memory
 # guard (it stops while a GitHub runner job is active or memory is short, then resumes), and
 # none can spend money: API and AWS credentials are removed from each stage's environment.
@@ -59,3 +61,12 @@ stages:
       - {glob: "results/mac_overnight_b64/minif2f/*/seed0/summary.jsonl", files: 3, rows: 244}
     after: [putnam_wait]
     min_disk_gb: 3
+
+  - name: qwen_context_control
+    title: Judge-context control, local Qwen judge, 300 proofs in order and shuffled
+    run: bash scripts/mac_context_control.sh
+    env: {RUN: results/pilot3, PROOFS: "300", PROMPT: v1, HOURS: "48"}
+    status: bash scripts/mac_context_control.sh --status
+    done_when: [results/context_control/qwen2.5_7b-instruct/comparison.json]
+    after: [putnam_wait]
+    min_disk_gb: 6

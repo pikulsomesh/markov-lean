@@ -11,8 +11,9 @@ watches it.
 | 3 | `pnt` | the same for PNT+ | hours | about 12 GB, freed at its end |
 | 4 | `carleson` | the same for Carleson's theorem (the within-area control) | hours | about 12 GB, freed at its end |
 | 5 | `minif2f_b64` | the 64-expansion miniF2F search, 244 problems under 3 conditions (`configs/search_eval_mac_b64.yaml`, results in `results/mac_overnight_b64`) | about 90 h plus pauses | about 1 GB |
+| 6 | `qwen_context_control` | the judge-context control: the local Qwen judge labels 300 pilot proofs twice, steps in order and steps shuffled, then compares switching (`scripts/mac_context_control.sh`, results in `results/context_control/qwen2.5_7b-instruct`, see `docs/context_control.md`) | about 4 to 7 h plus pauses | under 1 GB (plus 4.7 GB if the model must be pulled) |
 
-The extraction times are a guess: these builds have not run on the Mac yet. Stages 2 to 5 each
+The extraction times are a guess: these builds have not run on the Mac yet. Stages 2 to 6 each
 need stage 1 to finish; they do not depend on each other.
 
 ## Commands
@@ -53,6 +54,10 @@ command, and `--foreground` runs it in the terminal instead.
 - **Done means checked.** A stage is done when its command exits 0 and its outputs exist (for an
   extraction, its steps table and summary; for the search, 244 finished problems per condition).
   Exit 0 with work left, as when a time limit runs out, is *incomplete*.
+- **New stages.** The queue reads `configs/mac_queue.yaml` once, when it starts. A stage added
+  while it runs is picked up the next time it starts: when the running queue has finished, `git pull`
+  and run `scripts/mac_queue.sh` again; done stages are skipped. (`--stop` and a restart also work,
+  and the stage it stops resumes.)
 - **Resume.** Starting the queue again skips done stages, resumes an interrupted one (after a
   reboot, a crash or `--stop`), and runs failed and incomplete ones again; each stage's script
   skips the work it already finished.
