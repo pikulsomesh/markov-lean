@@ -139,7 +139,7 @@ def _sh(*args, env=None):
     base = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     e = {**base, "PY": sys.executable, **(env or {})}
     return subprocess.run(["bash", str(SCRIPT), *args], cwd=ROOT, env=e, capture_output=True, text=True,
-                          timeout=900)
+                          timeout=600)
 
 
 @sh_only
@@ -157,8 +157,10 @@ def test_script_end_to_end(tmp_path, paper_dir):
     _case_with_judges(res / "cases" / "carleson", 80, 0.1, 4)
     pnt = res / "cases" / "pnt"
     pd.read_parquet(res / "cases" / "carleson" / "steps.parquet").to_parquet(pnt / "steps.parquet")
+    # CI runs inside a GitHub runner job, which the guard would otherwise wait out.
     env = {"RESULTS": str(res), "PAPER": str(paper_dir), "SKIP_PDF": "1", "GUARD_LOCK": "", "PAPER_ARGS": "",
-           "N_PERM": "19", "N_BOOT": "20", "ANTHROPIC_API_KEY": "should-not-be-used"}
+           "N_PERM": "19", "N_BOOT": "20", "ANTHROPIC_API_KEY": "should-not-be-used",
+           "YIELD_TO_RUNNER": "0", "MIN_FREE_GB": "0", "RESUME_FREE_GB": "0"}
     p = _sh(env=env)
     assert p.returncode == 0, p.stdout + p.stderr
     assert "pnt: not submitted yet" in p.stdout and "still waiting on: pnt" in p.stdout
@@ -176,3 +178,9 @@ def test_script_end_to_end(tmp_path, paper_dir):
     # a rerun skips what is done
     p2 = _sh(env=env)
     assert p2.returncode == 0 and "switch test on judge labels" not in p2.stdout
+
+
+@sh_only
+def test_script_can_skip_runner_yield():
+    text = SCRIPT.read_text()
+    assert '"${YIELD_TO_RUNNER:-1}" = 0 ] && echo --no-runner-yield' in text

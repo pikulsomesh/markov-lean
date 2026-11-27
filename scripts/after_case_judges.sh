@@ -24,7 +24,8 @@
 # Settings (environment): CASES (default "sphere_packing pnt carleson"), N_PERM (1000), N_BOOT (2000),
 # HOURS (guard limit, default 48; waiting for the lock counts), MIN_FREE_GB (1), RESUME_FREE_GB (3),
 # PAPER_ARGS (default "--pilot results/pilot3 --accuracy results/gold/accuracy"), SKIP_PDF=1 skips make,
-# RESULTS (default results) and PAPER (default paper) folders, GUARD_LOCK (the guard's shared lock).
+# RESULTS (default results) and PAPER (default paper) folders, GUARD_LOCK (the guard's shared lock),
+# YIELD_TO_RUNNER=0 stops the guard pausing for GitHub runner jobs (for tests run inside a runner job).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -109,7 +110,8 @@ rm -f "$STATE/analyse.done"
 say "analysis (guarded: waits for any running search to finish first)"
 env -u ANTHROPIC_API_KEY PYTHONUNBUFFERED=1 "$PY" -m markov_lean.mac_guard --hours "${HOURS:-48}" \
   --state "$STATE/guard.json" --min-free-gb "${MIN_FREE_GB:-1}" --resume-free-gb "${RESUME_FREE_GB:-3}" \
-  ${GUARD_LOCK+--lock "$GUARD_LOCK"} -- bash "$0" --analyse
+  ${GUARD_LOCK+--lock "$GUARD_LOCK"} $( [ "${YIELD_TO_RUNNER:-1}" = 0 ] && echo --no-runner-yield ) \
+  -- bash "$0" --analyse
 if [ ! -f "$STATE/analyse.done" ]; then
   say "the analysis stopped before it finished (guard limit HOURS=${HOURS:-48}); rerun to resume"
   exit 1
