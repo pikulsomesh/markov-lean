@@ -37,12 +37,13 @@ command, and `--foreground` runs it in the terminal instead.
   | Variable | Bound | Default | What it does |
   |---|---|---|---|
   | `MIN_FREE_GB` | lower | 1 | stops the running job when available memory falls below it |
-  | `RESUME_FREE_GB` | upper | 4 for the search, 6 for an extraction | starts or resumes a job only once at least this much is available |
+  | `RESUME_FREE_GB` | upper | 3 | starts or resumes a job only once at least this much is available |
 
   The job also stops at once for a GitHub runner job, critical memory pressure, or swap growing
   by more than `MAX_SWAP_GROWTH_GB` (1.5); pressure *warn* alone does not stop it. On Nov 27 the
-  loaded prover sat at 1.4 to 2.2 GB available and the idle Mac at 7 to 9 GB, so 1 and 4 sit
-  below and above those. The upper bound can't be under the lower one. For example
+  loaded prover sat at 1.4 to 2.2 GB available and the idle Mac at 7 to 9 GB, so 1 and 3 sit
+  below and above those. An extraction with `JOBS=2` can need 4 to 8 GB, so if one stops and
+  starts over and over, start the queue with `JOBS=1` or a higher `RESUME_FREE_GB`. The upper bound can't be under the lower one. For example
   `MIN_FREE_GB=1 RESUME_FREE_GB=5 scripts/mac_queue.sh` applies to every stage. Each guard prints
   its bounds when it starts and in `--status` ("memory bounds: stops below ... starts at ...").
   New values take effect when that job starts again, so change them with `--stop` and a restart.

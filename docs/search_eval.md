@@ -293,7 +293,7 @@ runs it under `markov_lean.mac_guard`, which gives that memory back on its own:
   alone does not stop it: with the prover loaded the Mac sits at *warn* with about 2 GB available
   and no swap, and stopping there made the search unload, restart and stop again without progress.
 * it starts the search again once no runner job has run for `COOLDOWN` seconds (120), pressure is
-  normal and `RESUME_FREE_GB` (4) is available. Until then it waits and says why, in the log and in
+  normal and `RESUME_FREE_GB` (3) is available. Until then it waits and says why, in the log and in
   `--status`.
 * it gives up after 3 failed starts in a row (an error in the search itself), and stops after
   `HOURS` in all, pauses included.

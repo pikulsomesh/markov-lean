@@ -32,7 +32,7 @@
 #   CONFIG=configs/search_eval_mac_overnight.yaml
 #   MIN_FREE_GB=1                lower bound: stop the search below this many GB available
 #                                (the loaded prover sits near 1.5 to 2 GB, so keep it under that)
-#   RESUME_FREE_GB=4             upper bound: start or resume only with this many GB available
+#   RESUME_FREE_GB=3             upper bound: start or resume only with this many GB available
 #                                (an idle Mac has about 7 to 9 GB; not under MIN_FREE_GB)
 #   MAX_SWAP_GROWTH_GB=1.5  COOLDOWN=120  POLL=10
 #   YIELD_TO_RUNNER=1            0 to ignore runner jobs (memory checks still apply)
@@ -58,7 +58,7 @@ MSM_DIR="${MSM_DIR:-}"
 CONFIG="${CONFIG:-configs/search_eval_mac_overnight.yaml}"
 PY="${PY:-.venv/bin/python}"
 MIN_FREE_GB="${MIN_FREE_GB:-1}"
-RESUME_FREE_GB="${RESUME_FREE_GB:-4}"
+RESUME_FREE_GB="${RESUME_FREE_GB:-3}"
 MAX_SWAP_GROWTH_GB="${MAX_SWAP_GROWTH_GB:-1.5}"
 COOLDOWN="${COOLDOWN:-120}"
 POLL="${POLL:-10}"

@@ -25,7 +25,7 @@
 #
 # Settings (environment): CASE_DIR (default ~/cases/<name>), OUT (default results/cases/<name>),
 # JOBS (Lean files elaborated at once, default 2; each takes about 2 to 4 GB), RESUME_FREE_GB
-# (default 6), MIN_DISK_GB (default 15), KEEP_BUILD (default 0), HOURS (guard limit per stage, default 168; waiting for the
+# (default 3), MIN_DISK_GB (default 15), KEEP_BUILD (default 0), HOURS (guard limit per stage, default 168; waiting for the
 # lock counts, so a long search ahead of it must not use it up).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -119,7 +119,7 @@ guarded() {  # name -- command...
   local name=$1; shift 2
   env -u ANTHROPIC_API_KEY PYTHONUNBUFFERED=1 "$PY" -m markov_lean.mac_guard --hours "${HOURS:-168}" \
     --state "$STATE/${name}_guard.json" --min-free-gb "${MIN_FREE_GB:-1}" \
-    --resume-free-gb "${RESUME_FREE_GB:-6}" --max-swap-growth-gb "${MAX_SWAP_GROWTH_GB:-1.5}" \
+    --resume-free-gb "${RESUME_FREE_GB:-3}" --max-swap-growth-gb "${MAX_SWAP_GROWTH_GB:-1.5}" \
     --cooldown "${COOLDOWN:-120}" --poll "${POLL:-10}" -- "$@"
 }
 

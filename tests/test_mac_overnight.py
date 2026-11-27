@@ -103,7 +103,7 @@ def test_dry_run_is_local_resumable_and_credential_free(tmp_path):
     res = _script(["--dry-run"], {"HOURS": "7", "LIMIT": "30"}, tmp_path)
     assert res.returncode == 0, res.stderr
     run = next(l for l in res.stdout.splitlines() if l.startswith("run:"))
-    for part in ("markov_lean.mac_guard --hours 7 --hours-flag=--max-hours", "--resume-free-gb 4",
+    for part in ("markov_lean.mac_guard --hours 7 --hours-flag=--max-hours", "--resume-free-gb 3",
                  "--backend llama_cpp", "--limit 30", "--workers 1", "--yes", "--no-parquet",
                  "--condition lm", "--condition area_l0.3", "--condition random_l0.3",
                  "-u ANTHROPIC_API_KEY", "-u AWS_ACCESS_KEY_ID", "-u AWS_SECRET_ACCESS_KEY"):
