@@ -170,6 +170,27 @@ def test_steady_warn_with_the_model_loaded_does_not_stop_the_job(job, tmp_path):
     assert not any("memory pressure level" in l for l in lines)
 
 
+def test_the_bounds_are_logged_kept_in_state_and_shown_by_status(job, tmp_path):
+    cmd, work = job
+    lim = mg.Limits(min_free_gb=1.0, resume_free_gb=4.0, cooldown=0.0)
+    g, lines = _guard(cmd, Probes((IDLE, 2), (BUSY, 10_000)), tmp_path, limits=lim, hours=0.0005)
+    g.grace = g.term_wait = 0.3
+    assert g.run() == 0
+    assert "stops below 1 GB available (lower bound)" in lines[0]
+    assert "starts at 4 GB available (upper bound)" in lines[0]
+    st = json.loads((tmp_path / "state.json").read_text())
+    assert st["bounds"]["min_free_gb"] == 1.0 and st["bounds"]["resume_free_gb"] == 4.0
+    text = mg.status_text(tmp_path / "state.json")
+    assert "memory bounds: stops below 1 GB" in text and "starts at 4 GB" in text
+
+
+def test_an_upper_bound_under_the_lower_one_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="must not be under"):
+        mg.Guard(["true"], mg.Limits(min_free_gb=4.0, resume_free_gb=3.0))
+    with pytest.raises(SystemExit, match="must not be under"):
+        mg.main(["--min-free-gb", "5", "--resume-free-gb", "4", "--state", str(tmp_path / "s.json"), "--", "true"])
+
+
 def test_the_cli_passes_max_pressure_on():
     assert mg.build_parser().parse_args(["--", "true"]).max_pressure == 2
     assert mg.build_parser().parse_args(["--max-pressure", "1", "--", "true"]).max_pressure == 1

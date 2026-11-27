@@ -30,7 +30,11 @@
 #   MODEL=~/models/deepseek-prover-v1.5-rl_q4_k_m.gguf
 #   MSM_DIR=                     saved Markov model (default: msm_dir in the config)
 #   CONFIG=configs/search_eval_mac_overnight.yaml
-#   MIN_FREE_GB=1  RESUME_FREE_GB=4  MAX_SWAP_GROWTH_GB=1.5  COOLDOWN=120  POLL=10
+#   MIN_FREE_GB=1                lower bound: stop the search below this many GB available
+#                                (the loaded prover sits near 1.5 to 2 GB, so keep it under that)
+#   RESUME_FREE_GB=4             upper bound: start or resume only with this many GB available
+#                                (an idle Mac has about 7 to 9 GB; not under MIN_FREE_GB)
+#   MAX_SWAP_GROWTH_GB=1.5  COOLDOWN=120  POLL=10
 #   YIELD_TO_RUNNER=1            0 to ignore runner jobs (memory checks still apply)
 #
 # The prover runs in-process through llama.cpp. API and AWS credentials are removed from
@@ -68,7 +72,7 @@ case "${1:-}" in
   --status) mode=status ;;
   --report) mode=report ;;
   --agent-plist) mode=plist ;;
-  -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,41p' "$0"; exit 0 ;;
   *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
 esac
 
@@ -189,6 +193,7 @@ log="$OUT/logs/$(date '+%Y%m%d-%H%M%S').log"
 {
   [ ${#awake[@]} -eq 0 ] && say "caffeinate not found: keep the machine from sleeping yourself"
   say "plan $PLAN: $BENCHMARK, conditions: $CONDITIONS, for up to $HOURS h. Log: $log"
+  say "memory bounds: stops below MIN_FREE_GB=$MIN_FREE_GB GB available, starts at RESUME_FREE_GB=$RESUME_FREE_GB GB"
   say "One line per finished problem. Stops for runner jobs and low memory, then resumes on its own."
   say "Ctrl-C stops; rerun this command to resume. From another terminal: scripts/mac_overnight.sh --status"
 } | tee -a "$log"

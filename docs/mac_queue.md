@@ -31,6 +31,21 @@ command, and `--foreground` runs it in the terminal instead.
 - **One at a time, in order.** The queue holds its own lock, so starting it twice only reports
   that it is running. Each stage keeps its memory guard: it stops while a GitHub runner job is
   active or memory is short, then resumes on its own.
+- **Memory bounds.** Every stage's guard has a lower and an upper bound on available memory,
+  set as environment variables when you start the queue (or a script on its own):
+
+  | Variable | Bound | Default | What it does |
+  |---|---|---|---|
+  | `MIN_FREE_GB` | lower | 1 | stops the running job when available memory falls below it |
+  | `RESUME_FREE_GB` | upper | 4 for the search, 6 for an extraction | starts or resumes a job only once at least this much is available |
+
+  The job also stops at once for a GitHub runner job, critical memory pressure, or swap growing
+  by more than `MAX_SWAP_GROWTH_GB` (1.5); pressure *warn* alone does not stop it. On Nov 27 the
+  loaded prover sat at 1.4 to 2.2 GB available and the idle Mac at 7 to 9 GB, so 1 and 4 sit
+  below and above those. The upper bound can't be under the lower one. For example
+  `MIN_FREE_GB=1 RESUME_FREE_GB=5 scripts/mac_queue.sh` applies to every stage. Each guard prints
+  its bounds when it starts and in `--status` ("memory bounds: stops below ... starts at ...").
+  New values take effect when that job starts again, so change them with `--stop` and a restart.
 - **Logs and state per stage.** `results/mac_queue/logs/NN_<stage>.log` (one per stage, every
   attempt appended), `results/mac_queue/state.json` (state, start, end, attempts, exit code) and
   `results/mac_queue/queue.log` (the queue's own lines).
