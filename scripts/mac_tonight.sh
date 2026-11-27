@@ -85,7 +85,7 @@ no_keys=(env -u ANTHROPIC_API_KEY -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY 
 guarded() {  # name hours -- command...: run under the memory guard, which yields to runner jobs
   local name=$1 hours=$2; shift 3
   local g=(-m markov_lean.mac_guard --hours "$hours" --state "$STATE/${name}_guard.json"
-           --min-free-gb "${MIN_FREE_GB:-1}" --resume-free-gb "${RESUME_FREE_GB:-4}"
+           --min-free-gb "${MIN_FREE_GB:-1}" --resume-free-gb "${RESUME_FREE_GB:-3}"
            --max-swap-growth-gb "${MAX_SWAP_GROWTH_GB:-1.5}" --cooldown "${COOLDOWN:-120}" --poll "${POLL:-10}")
   [ "${YIELD_TO_RUNNER:-1}" = 1 ] || g+=(--no-runner-yield)
   "${no_keys[@]}" "$PY" "${g[@]}" -- "$@"

@@ -52,7 +52,7 @@ import signal
 import subprocess
 import sys
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -161,6 +161,18 @@ class Limits:
     max_pressure: int = 2             # stop above this level: 2 (warn) runs on, 4 (critical) stops
     cooldown: float = 120.0           # seconds with no runner job (and room) before starting again
 
+    def check(self) -> None:
+        if self.resume_free_gb < self.min_free_gb:
+            raise ValueError(f"the start bound ({self.resume_free_gb:g} GB) must not be under the stop bound "
+                             f"({self.min_free_gb:g} GB), or the job would stop as soon as it starts")
+
+    def describe(self) -> str:
+        """The memory bounds in one line, for the log and --status."""
+        top = "warn" if self.max_pressure < 2 else "critical"
+        return (f"memory bounds: stops below {self.min_free_gb:g} GB available (lower bound), at {top} "
+                f"pressure, on swap growth over {self.max_swap_growth_gb:g} GB or a runner job; "
+                f"starts at {self.resume_free_gb:g} GB available (upper bound) and normal pressure")
+
 
 def stop_reason(s: Snapshot, lim: Limits, swap_at_start: float | None) -> str | None:
     """Why the running job must stop now, or None."""
@@ -200,6 +212,7 @@ class State:
     started_at: str = ""
     updated_at: str = ""
     last: dict = field(default_factory=dict)
+    bounds: dict = field(default_factory=dict)
 
 
 def _now() -> str:
@@ -215,6 +228,7 @@ class Guard:
                  sleep: Callable[[float], None] = time.sleep) -> None:
         self.command = list(command)
         self.lim = limits or Limits()
+        self.lim.check()
         self.hours, self.hours_flag = hours, hours_flag
         self.poll, self.grace = poll, grace
         self.term_wait = 30.0             # seconds after SIGTERM before SIGKILL
@@ -226,7 +240,7 @@ class Guard:
         self.probe = probe_fn or probe
         self.log = log or (lambda m: print(f"{time.strftime('%H:%M:%S')} guard: {m}", flush=True))
         self.clock, self.sleep = clock, sleep
-        self.state = State(started_at=_now())
+        self.state = State(started_at=_now(), bounds=asdict(self.lim))
         self.child: subprocess.Popen | None = None
         self._interrupted = False
 
@@ -312,6 +326,7 @@ class Guard:
     # -- main loop
     def run(self) -> int:
         t0 = self.clock()
+        self.log(self.lim.describe())
         quiet_since: float | None = None
         last_note = -1e18
         try:
@@ -417,6 +432,9 @@ def status_text(state_path: str | Path) -> str:
            f"starts {s.get('starts', 0)}, stops for room {s.get('yields', 0)}, failed starts {s.get('failures', 0)}"]
     if snap:
         out.append(snap.line())
+    if s.get("bounds"):
+        names = {f.name for f in fields(Limits)}
+        out.append(Limits(**{k: v for k, v in s["bounds"].items() if k in names}).describe())
     return "\n".join(out)
 
 
@@ -427,8 +445,10 @@ def build_parser() -> argparse.ArgumentParser:
     lim = Limits()
     p.add_argument("--hours", type=float, help="stop after this many hours in all (paused time counts)")
     p.add_argument("--hours-flag", help="pass the hours left to each start as this flag, e.g. --hours-flag=--max-hours")
-    p.add_argument("--min-free-gb", type=float, default=lim.min_free_gb)
-    p.add_argument("--resume-free-gb", type=float, default=lim.resume_free_gb)
+    p.add_argument("--min-free-gb", type=float, default=lim.min_free_gb,
+                   help="lower bound: stop the running job below this many GB available")
+    p.add_argument("--resume-free-gb", type=float, default=lim.resume_free_gb,
+                   help="upper bound: start or resume only with at least this many GB available")
     p.add_argument("--max-swap-growth-gb", type=float, default=lim.max_swap_growth_gb)
     p.add_argument("--max-pressure", type=int, choices=(1, 2), default=lim.max_pressure,
                    help="stop the running job above this pressure level: 2 (default) stops only at "
@@ -468,6 +488,10 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGHUP, _as_ctrl_c)
     limits = Limits(args.min_free_gb, args.resume_free_gb, args.max_swap_growth_gb, args.max_pressure,
                     args.cooldown)
+    try:
+        limits.check()
+    except ValueError as e:
+        raise SystemExit(str(e)) from None
     guard = Guard(cmd, limits, hours=args.hours, hours_flag=args.hours_flag, poll=args.poll, grace=args.grace,
                   max_failures=args.max_failures, on_pause=args.on_pause, state_path=args.state,
                   lock_path=args.lock or None,

@@ -213,7 +213,7 @@ def test_repl_check_imports_mathlib_first(mac, tmp_path):
 
 def test_guarded_stages_resume_at_4_gb_by_default():
     text = SCRIPT.read_text()
-    assert '--resume-free-gb "${RESUME_FREE_GB:-4}"' in text and "RESUME_FREE_GB:-10" not in text
+    assert '--resume-free-gb "${RESUME_FREE_GB:-3}"' in text and "RESUME_FREE_GB:-10" not in text
 
 
 def test_the_api_submit_needs_a_typed_yes_and_never_repeats(mac):
