@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The Mac Mini's run queue (configs/mac_queue.yaml): one stage at a time, in order, over days.
 # Stages now: wait for the Putnam search to end, sphere packing, PNT+ and Carleson extractions,
-# then the 64-expansion miniF2F search. Guide: docs/mac_queue.md.
+# the 64-expansion miniF2F search, then the local judge-context control. Guide: docs/mac_queue.md.
 #
 #   scripts/mac_queue.sh                 # start it in the background (closing the terminal is fine)
 #   scripts/mac_queue.sh --status        # every stage's state, times, and the current stage's progress

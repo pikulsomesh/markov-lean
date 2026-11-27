@@ -158,7 +158,7 @@ def test_repo_queue_config_loads():
     q = mq.Queue.load(Path(__file__).resolve().parents[1] / "configs/mac_queue.yaml",
                       root=Path(__file__).resolve().parents[1])
     names = [s.name for s in q.stages]
-    assert names == ["putnam_wait", "sphere_packing", "pnt", "carleson", "minif2f_b64"]
+    assert names == ["putnam_wait", "sphere_packing", "pnt", "carleson", "minif2f_b64", "qwen_context_control"]
     assert all(s.after == ["putnam_wait"] for s in q.stages[1:])
     root = Path(__file__).resolve().parents[1]
     for s in q.stages[1:4]:
