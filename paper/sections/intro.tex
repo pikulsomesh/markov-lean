@@ -11,37 +11,48 @@ explicit notion of area. They sample tactics from a language model and expand
 the most likely branches, so any knowledge of where a proof is heading lives
 implicitly in the model's weights.
 
-We study area changes directly, borrowing a tool from molecular simulation.
-A Markov state model (MSM) describes a long trajectory through a
+We first tried to find areas without labels, borrowing a tool from molecular
+simulation. A Markov state model (MSM) describes a long trajectory through a
 high-dimensional space as jumps between a modest number of discrete states,
 and identifies sets of states the trajectory stays in for long stretches
-before switching \citep{prinz2011markov,husic2018markov}. In molecular
-dynamics the trajectory is a sequence of conformations and the metastable
-sets are conformational states. Here the trajectory is the sequence of goal
-states in a proof, the clock is the proof step, and our hypothesis is that
-the metastable sets correspond to areas of mathematics.
+before switching \citep{prinz2011markov,husic2018markov}. Here the trajectory
+is the sequence of goal states in a proof, the clock is the proof step, and
+the hypothesis was that the metastable sets correspond to areas of
+mathematics. We fixed a test before collecting any labels: the metastable
+sets had to agree with independent area labels at an NMI of at least 0.15
+and beat a baseline that labels each proof by its Mathlib folder. They do
+neither. One set absorbs most steps, the spectrum has no gap at any setting
+we tried, and the result survives non-reversible and absorbing variants of
+the model. Goal-state text changes far more between proofs than within one,
+so geometry on goal states sees proofs, not areas.
 
-This framing gives testable claims. If proofs move between areas in a
-regular way, a Markov model at some lag $\lag$ should predict transitions at
-multiples of $\lag$ (the Chapman--Kolmogorov test), its slow implied
-timescales should stop changing as $\lag$ grows, and its metastable sets
-should agree with independent area labels better than a simple baseline.
-Mathematical areas carry no labels in Lean or Mathlib, so we label proofs
-with top-level MSC 2020 codes \citep{msc2020} from two LLM judges and measure
-how far the judges agree before trusting them. If the model holds up, it
-offers a signal for search: which area a candidate tactic leads to, and
-whether the search has been stuck in one area for too long.
+We then measured areas directly. Mathematical areas carry no labels in Lean
+or Mathlib, so two LLM judges label the goal before each step with a
+top-level MSC 2020 code \citep{msc2020}, and we score the judges on benchmark
+statements whose area the benchmark authors recorded. With these labels the
+answer to the title question is: mostly not. A typical proof stays in one
+area, and when it leaves, its off-area steps come in runs rather than single
+steps. The lemmas a step cites tell a different story, mixing areas almost as
+often as a random order would. Our reading is that Mathlib packs cross-area
+moves into bridge lemmas, so the goal stays in one area while the library
+does the crossing. A prover that wants cross-area knowledge will find it in
+premise retrieval more than in the shape of the goal.
 
 \paragraph{Contributions.}
 \begin{itemize}
-  \item A Markov state model over Lean goal-state trajectories, built from
-  LeanDojo's traced Mathlib proofs \citep{yang2023leandojo}, with every
-  standard MSM check reported (implied-timescale convergence,
-  Chapman--Kolmogorov, connectivity, bootstrap error bars).
-  \item A comparison of the model's metastable sets with MSC 2020 labels from
-  two LLM judges, against a baseline that labels each proof by its Mathlib
-  folder.
-  \item An area-aware prior for best-first proof search, evaluated on
-  miniF2F \citep{zheng2022minif2f} and PutnamBench \citep{tsoukalas2024putnambench}
-  under a fixed budget.
+  \item Step-level MSC 2020 labels for \resSwitchJudgeProofs{} traced Mathlib
+  proofs from two LLM judges, with their agreement and their accuracy on a
+  gold set built only from benchmark metadata
+  \citep{zheng2022minif2f,tsoukalas2024putnambench}.
+  \item A within-proof switch test against four nulls (a shuffle of each
+  proof's own areas, a Markov chain per Mathlib folder, a folder pool and a
+  judge-noise floor), which shows that proofs are area-coherent and that the
+  steps they cite are not.
+  \item A negative result with its gate fixed in advance: a Markov state model
+  over goal-state embeddings \citep{yang2023leandojo} does not recover areas,
+  across microstate counts, lags and reversible, non-reversible and absorbing
+  fits.
+  \item A paired test of an area prior in best-first search on miniF2F
+  \citep{zheng2022minif2f} and PutnamBench
+  \citep{tsoukalas2024putnambench}, which finds no change at a small budget.
 \end{itemize}

@@ -1,13 +1,18 @@
-% DRAFT (Claude): awaits the author's rewrite. Fill the numbers once the pilot
-% and search runs are in. ICML asks for one paragraph of 4-6 sentences.
+% DRAFT (Claude): awaits the author's rewrite. Reframed Nov 27 around area
+% coherence, after gate 1 failed; every number is a macro filled by
+% `markov-lean paper`. ICML asks for one paragraph of 4-6 sentences.
 A Lean proof is a sequence of tactic steps, each of which turns one goal state
-into the next. We ask whether these trajectories move between areas of
-mathematics in a regular way that a small model can capture. We embed goal
-states, cluster them into microstates, fit a Markov state model with proof
-steps as the unit of time, and coarse-grain it into metastable sets with PCCA+.
-Against MSC 2020 labels from two LLM judges, the metastable sets reach an NMI
-of \resMacroNMI, compared with \resFolderNMI{} for a baseline that labels each proof
-by its Mathlib folder, and the model's slowest process relaxes over
-about \resSlowestTimescale{} tactic steps. Used as a prior in best-first search with
-DeepSeek-Prover-V1.5-RL, the area model changes the number of problems solved
-under a fixed budget by \resSearchGainMiniF{} on miniF2F and \resSearchGainPutnam{} on PutnamBench.
+into the next. We ask whether single proofs move between areas of mathematics.
+Two LLM judges label the goal before each step of \resSwitchJudgeProofs{}
+Mathlib proofs with a top-level MSC 2020 code; on benchmark statements whose
+area is known from metadata they reach \resGoldAccHaiku\% and
+\resGoldAccSonnet\% accuracy, against \resGoldMajority\% for the majority
+class. Proofs are area-coherent: \resSwitchJudgeHas\% change area at all, and
+their steps switch \resSwitchJudgeRate{} times per move against
+\resSwitchJudgeRateShuffle{} when each proof's own areas are shuffled, while
+the areas of the lemmas that steps cite switch almost as often as a shuffle.
+A label-free Markov state model over goal-state embeddings, with a gate fixed
+before any label was seen, does not recover these areas (NMI \resMacroNMI{}
+against \resFolderNMI{} for the Mathlib folder), and an area prior built from
+it leaves best-first search with DeepSeek-Prover-V1.5 unchanged on miniF2F
+(\resSearchGainMiniF{} points).

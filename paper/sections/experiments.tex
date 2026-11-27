@@ -49,9 +49,27 @@ through the same pipeline end to end.
   \label{fig:ck}
 \end{figure}
 
-\todo{which lag the timescales converge at; how many slow processes are
-resolved; whether the CK test passes, and for which macrostate pairs it
-fails.}
+% Numbers in this paragraph without a macro come from the stability sweep and
+% the non-reversible check (results/real-labelfree, results/real-nonrev,
+% results/giant-state on the project share, Nov 25); check them before submission.
+The model fails as a description of areas before any label is read. At the
+chosen lag the slow implied timescales still change with the lag, and the
+slowest, \resSlowestTimescale{} steps, is longer than almost every proof;
+\resChecksFailed{} of the model checks fail. One macrostate holds most steps
+(85.7\% in the fit with 100 microstates at lag 1, and 86--98\% over 12
+settings of microstate count and lag). The spectral gap ratio is 1.01 to 1.24
+in every setting, against the 1.5 we required, and the 10-set partition is
+not stable across microstate counts (ARI 0.06 to 0.29 against the reference
+fit). The nine small macrostates are single microstates made slow by a few
+long proofs, not areas. Neither a non-reversible fit with G-PCCA nor an
+absorbing end state removes the large set: its share moves by at most 1.5
+points, and detailed balance on the macrostate chain is never rejected.
+Counting only jumps between microstates, so that dwelling cannot make a
+microstate slow, shrinks the large set to about half of the steps but still
+leaves no gap and no partition stable across seeds. The reason is simple:
+goal-state text changes far more between proofs than within one. Hypotheses
+are most of a state's characters, binder names are specific to a proof, and
+43\% of proofs never leave their microstate.
 
 \subsection{Do macrostates match areas?}
 
@@ -69,11 +87,19 @@ fails.}
 We call the area hypothesis supported if the macrostates reach an NMI of at
 least 0.15 against the judges' consensus labels and beat the Mathlib-folder
 baseline. Both conditions were fixed before any labels were collected.
-\todo{judge agreement ($\kappa$) and accuracy on the gold set (strict:
-\resGoldAccHaiku\% and \resGoldAccSonnet\%; family: \resGoldFamAccHaiku\% and
-\resGoldFamAccSonnet\%; majority class \resGoldMajority\%); NMI and ARI
-for $m = 10$ and the sweep over $m$; next-area prediction against the
-``stay'' and marginal baselines.}
+The judges agree on steps at $\kappa = \resJudgeKappa$. On the gold set
+they reach \resGoldAccHaiku\% and \resGoldAccSonnet\% exact accuracy
+(\resGoldFamAccHaiku\% and \resGoldFamAccSonnet\% when a neighbouring class
+counts), against \resGoldMajority\% for the majority class; the local judge
+reaches 65.4\% with the same prompt and 80.1\% with a prompt written for it,
+and agrees with the Claude judges only at $\kappa \approx 0.3$
+\todo{exact $\kappa$ and its sample}. The macrostates fail the test:
+NMI \resMacroNMI{} against the 0.15 we required and \resFolderNMI{} for the
+folder baseline (Table~\ref{tab:areas}). $k$-means on the same features with
+no dynamics reaches \resKmeansNMI. Against the Mathlib folder, the
+microstates carry much more area signal (AMI 0.37--0.40) than the
+macrostates built from them (0.10--0.18), so the signal is lost when PCCA+
+pools microstates around the large set.
 
 \begin{table}[t]
   \caption{Agreement with the judges' consensus MSC codes. Brackets are
@@ -98,11 +124,26 @@ for $m = 10$ and the sweep over $m$; next-area prediction against the
 \label{sec:switches}
 % Floats and captions from `markov-lean switches` (wired in by `markov-lean paper`);
 % the heading and the body text are the author's to write.
-\todo{Somesh: a sentence or two on what the switch test shows. Numbers are in
-the \texttt{\textbackslash resSwitch...} macros: for example
-\texttt{\textbackslash resSwitchJudgeHas}\% of proofs switch at least once,
-against \texttt{\textbackslash resSwitchJudgeHasMarkov}\% under the Markov
-null.}
+% DRAFT (Claude, Nov 27): the author asked for edits; rewrite freely.
+With judge labels, \resSwitchJudgeHas\% of the \resSwitchJudgeProofs{}
+proofs change area at least once, against \resSwitchJudgeHasMarkov\% under a
+Markov chain fit per Mathlib folder and \resSwitchJudgeHasPooled\% when
+each folder's areas are dealt to its proofs at random
+(Table~\ref{tab:switches}). Where a proof does leave its main area, the
+off-area steps come in runs: \resSwitchJudgeRate{} switches per move against
+\resSwitchJudgeRateShuffle{} for a shuffle of the proof's own areas. The
+share of steps off a proof's main area, \resSwitchJudgeOffMode\%, is below
+the \resSwitchJudgeOffModeNoise\% that judge disagreement alone would give a
+proof that never moves, so the share of proofs that switch is an upper bound
+on real movement. Premise areas behave differently:
+they switch \resSwitchPremiseRate{} times per move against
+\resSwitchPremiseRateShuffle{} for a shuffle, nearly random order. A step
+cites lemmas from several areas while its goal stays in one.
+
+Two readings remain open. A judge sees the whole proof at once, so it may
+smooth its own labels into runs; Section~\ref{sec:discussion} describes the
+control. And premise labels are noisy, which pushes any switch ratio toward
+that of a shuffle.
 
 \begin{table*}[t]
   \caption{Within-proof area switching, each proof weighted equally.
