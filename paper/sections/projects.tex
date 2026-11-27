@@ -1,0 +1,45 @@
+\section{Cross-area research projects}
+\label{app:projects}
+% DRAFT (Claude): awaits the author's rewrite. The table and numbers are written by
+% `markov-lean paper` from results/cases/<name>/summary.json, results/pfr/summary.json, each
+% project's switches/ run on judge labels, and results/cases/compare.json
+% (scripts/after_case_judges.sh after the judges).
+
+Mathlib is a library: its proofs are short and its lemmas are filed by area.
+To see how proofs behave where a result is known for joining fields, we
+extracted every tactic step of four research formalizations with the same
+rules as LeanDojo: sphere packing in dimension 8, the prime number theorem and
+its extensions (PNT+), the polynomial Freiman--Ruzsa conjecture (PFR), and, as a
+control that stays in one field, Carleson's theorem in harmonic analysis
+\todo{cite the four projects}. Table~\ref{tab:projects} gives two kinds of area
+label for each. Premise areas are free: a step's area is the majority Mathlib
+folder of the lemmas it cites, mapped to \textsc{msc} classes, optionally also
+counting the project's own lemmas by the file that defines them. Judge areas are
+the two judges' agreed \textsc{msc} codes, as in Section~\ref{sec:switches}.
+
+Premise areas switch about as often in the control
+(\resCaseCarlesonPremRate{} switches per move) as in sphere packing
+(\resCaseSpherePremRate{}) or PNT+ (\resCasePNTPremRate{}): long research
+proofs cite many Mathlib folders whatever their subject, so premise labels
+cannot tell a proof that crosses fields from one that only uses a lot of
+library. The judge switch rate minus the control's is
+\resCaseSphereVsCtlRate{} [\resCaseSphereVsCtlRateLo, \resCaseSphereVsCtlRateHi]
+switches per move in sphere packing ($p = \resCaseSphereVsCtlRateP$),
+\resCasePNTVsCtlRate{} [\resCasePNTVsCtlRateLo, \resCasePNTVsCtlRateHi] in PNT+
+($p = \resCasePNTVsCtlRateP$) and \resCasePFRVsCtlRate{}
+[\resCasePFRVsCtlRateLo, \resCasePFRVsCtlRateHi] in PFR
+($p = \resCasePFRVsCtlRateP$).
+
+\begin{table*}[t]
+  \caption{Area switching in four research formalizations. Premise areas: all
+  extracted steps, switches between consecutive labelled steps, pooled over
+  moves; ``with own'' also labels the project's own lemmas by their file.
+  Judge areas: proofs with at least two judge-labelled steps, each proof
+  weighted equally, with the mean under the within-proof shuffle and the ratio
+  of the two (below 1 means a proof's steps in one area come in runs). Carleson's
+  theorem stays in harmonic analysis and is the control.}
+  \label{tab:projects}
+  \centering\small
+  \setlength{\tabcolsep}{4pt}
+  \resultstable{table_projects}
+\end{table*}

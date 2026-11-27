@@ -142,6 +142,76 @@ def convert(config: str | Path, raw: str | Path, out: str | Path, map_path: str 
     return summary
 
 
+# --------------------------------------------------------------------------- judge labels against the control
+
+COMPARE_STATS = ("switch_rate", "excess", "has_switch")
+
+
+def judge_proofs(case_dir: str | Path, source: str = "judge") -> pd.DataFrame | None:
+    """Per-proof rows of ``markov-lean switches`` on one case (``<case>/switches/proofs.csv``), with
+    ``excess`` = switch rate minus its within-proof shuffle mean; None when that run is missing."""
+    p = Path(case_dir) / "switches" / "proofs.csv"
+    if not p.exists():
+        return None
+    d = pd.read_csv(p)
+    d = d[d["source"] == source] if "source" in d else d
+    if d.empty or "shuffle_switch_rate" not in d:
+        return None
+    return d.assign(excess=d["switch_rate"] - d["shuffle_switch_rate"])
+
+
+def _boot_diff(a: np.ndarray, b: np.ndarray, rng, n_boot: int) -> list[float]:
+    da = rng.integers(0, len(a), (n_boot, len(a)))
+    db = rng.integers(0, len(b), (n_boot, len(b)))
+    d = a[da].mean(1) - b[db].mean(1)
+    return [float(np.quantile(d, 0.025)), float(np.quantile(d, 0.975))]
+
+
+def _perm_p(a: np.ndarray, b: np.ndarray, rng, n_perm: int) -> float:
+    """Two-sided permutation p of the difference in means, proofs swapped between the two projects."""
+    obs = abs(a.mean() - b.mean())
+    pool = np.concatenate([a, b])
+    hits = 0
+    for _ in range(n_perm):
+        rng.shuffle(pool)
+        hits += abs(pool[:len(a)].mean() - pool[len(a):].mean()) >= obs - 1e-12
+    return (hits + 1) / (n_perm + 1)
+
+
+def compare(cases: dict[str, str | Path], control: str, n_boot: int = 2000, n_perm: int = 2000,
+            seed: int = 0) -> dict:
+    """Judge-label switching of each case against the control project, each proof weighted equally.
+
+    Per case: proofs, mean switch rate, its shuffle mean, their ratio, mean excess over the shuffle
+    and the share of proofs with a switch. Per case other than the control: the difference from the
+    control in switch rate, in excess over the shuffle (ordering) and in share with a switch, each
+    with a 95% bootstrap interval over proofs and a two-sided permutation p. Spends nothing."""
+    rng = np.random.default_rng(seed)
+    rows = {n: judge_proofs(d) for n, d in cases.items()}
+    out: dict = {"control": control, "source": "judge", "n_boot": n_boot, "n_perm": n_perm,
+                 "cases": {}, "vs_control": {}, "missing": sorted(n for n, r in rows.items() if r is None)}
+    for n, d in rows.items():
+        if d is None:
+            continue
+        rate, shuf = float(d["switch_rate"].mean()), float(d["shuffle_switch_rate"].mean())
+        out["cases"][n] = {"proofs": int(len(d)), "switch_rate": rate, "shuffle": shuf,
+                           "ratio": rate / shuf if shuf else None, "excess": float(d["excess"].mean()),
+                           "has_switch": float(d["has_switch"].mean())}
+    ctl = rows.get(control)
+    if ctl is None:
+        return out
+    for n, d in rows.items():
+        if d is None or n == control:
+            continue
+        e = {}
+        for s in COMPARE_STATS:
+            a, b = d[s].to_numpy(float), ctl[s].to_numpy(float)
+            e[s] = {"difference": float(a.mean() - b.mean()), "ci95": _boot_diff(a, b, rng, n_boot),
+                    "p_two_sided": _perm_p(a, b, rng, n_perm)}
+        out["vs_control"][n] = e
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m markov_lean.case_study")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -159,7 +229,30 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--skip", help="file of module names to leave out (modules that failed to build)")
     b = sub.add_parser("build-failures", help="modules a failed lake build log names, one per line")
     b.add_argument("log")
+    k = sub.add_parser("compare", help="judge-label switching of each case against the control (no API calls)")
+    k.add_argument("--case", action="append", required=True, metavar="NAME=DIR",
+                   help="a case and its folder (holding switches/proofs.csv); repeat")
+    k.add_argument("--control", required=True, help="the control case's NAME")
+    k.add_argument("--out", required=True, help="JSON file to write")
+    k.add_argument("--n-boot", type=int, default=2000)
+    k.add_argument("--n-perm", type=int, default=2000)
     args = ap.parse_args(argv)
+    if args.cmd == "compare":
+        cases = dict(c.split("=", 1) for c in args.case)
+        r = compare(cases, args.control, args.n_boot, args.n_perm)
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(r, indent=2))
+        for n, c in r["cases"].items():
+            print(f"{n}: {c['proofs']} proofs, {c['switch_rate']:.3f} switches/move vs shuffle {c['shuffle']:.3f} "
+                  f"(ratio {c['ratio']:.2f}), {c['has_switch']:.1%} switch")
+        for n, e in r["vs_control"].items():
+            d = e["switch_rate"]
+            print(f"{n} - {args.control}: switch rate {d['difference']:+.3f} [{d['ci95'][0]:+.3f}, "
+                  f"{d['ci95'][1]:+.3f}], p {d['p_two_sided']:.3g}")
+        if r["missing"]:
+            print(f"no judge switches run yet for: {', '.join(r['missing'])}")
+        print(f"wrote {args.out}")
+        return 0
     if args.cmd == "field":
         v = load_case(args.config).get(args.key)
         print(" ".join(v) if isinstance(v, list) else ("" if v is None else v))

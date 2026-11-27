@@ -106,15 +106,28 @@ for c in sphere_packing:7 pnt:18 carleson:24; do
   .venv/bin/python -m markov_lean.judge submit --steps results/cases/$n/steps.parquet \
     --out results/cases/$n/api --max-dollars $cap --dry-run      # writes requests, spends nothing
 done
-# then, one case at a time (sphere_packing, then pnt, then carleson):
+# then, one case at a time (sphere_packing, then pnt, then carleson), checking each one's cost:
 n=sphere_packing; cap=7
 .venv/bin/python -m markov_lean.judge submit --steps results/cases/$n/steps.parquet --out results/cases/$n/api --max-dollars $cap
-.venv/bin/python -m markov_lean.judge collect --out results/cases/$n/api
-.venv/bin/python -m markov_lean.judge agree --labels results/cases/$n/api/labels.parquet
-.venv/bin/python -m markov_lean.cli switches --run results/cases/$n --steps results/cases/$n/steps.parquet \
-  --labels results/cases/$n/api/labels.parquet --sources judge --out results/cases/$n/switches \
-  --markov-group none --pooled-within all --no-figures
 ```
+
+Once a case's batches have ended (usually within a day), one command does the rest and spends nothing:
+
+```
+bash scripts/after_case_judges.sh            # collect, switch tests, compare with Carleson, rebuild the paper
+bash scripts/after_case_judges.sh --status   # what is in and what is waiting
+```
+
+It collects each submitted case's labels through `scripts/collect_batches.py`, whose client can
+only read batch status and results. A case not yet submitted, or still running, is listed and
+skipped, so the command can run after each case and again at the end. The analysis runs under
+the memory guard's shared lock, so it waits for a search or extraction to finish first. It runs
+`judge agree` and `markov-lean switches` on judge labels per case, `python -m
+markov_lean.case_study compare` against Carleson (`results/cases/compare.json`, PFR included
+from `results/pfr/switches`), then `markov-lean paper` and `make -B -C paper`. The paper's
+cross-area table (`table_projects`, appendix "Cross-area research projects") already shows the
+free-label columns from each `summary.json`; its judge columns and the comparison numbers fill
+in from these runs.
 
 `--markov-group none --pooled-within all` as for PFR, since the case steps have no Mathlib
 folder. The comparison is each case's switches per move against its own shuffle: Mathlib
