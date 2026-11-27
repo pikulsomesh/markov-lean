@@ -49,6 +49,7 @@ implementation \citep{hoffmann2022deeptime}.
 \paragraph{LLMs as judges.}
 Using an LLM to label or grade outputs is now common, and its biases, such
 as position and verbosity effects, are documented \citep{zheng2023judging}.
-Because no Lean source carries area labels, we use two judges from
-different model sizes, report their agreement, and check them on statements
-with known MSC codes before treating their labels as a reference.
+Because no Lean source carries area labels, we use two judges of different
+sizes from one model family, check them on statements whose area the
+benchmark authors recorded, and add a local judge from another family to
+expose biases the two may share.

@@ -1,27 +1,46 @@
 \section{Discussion}
 \label{sec:discussion}
-% DRAFT (Claude): awaits the author's rewrite. Revisit once results are in;
-% the claims below are framed as what each outcome would mean.
+% DRAFT (Claude, Nov 27): awaits the author's rewrite. The PFR numbers are from
+% the PFR extraction (judge labels, Nov 26); once the cross-area appendix (PR 65)
+% is in, point to it with \ref{app:projects}.
 
-\todo{lead with what the timescales and NMI actually show.} If the slow
-implied timescales converge and the Chapman--Kolmogorov test passes, area
-changes within a proof follow a short-memory process that a few metastable
-sets describe. If instead the timescales keep growing with the lag, the next
-area depends on more history than the current goal state carries, for
-example on the proof strategy, which the goal state does not record.
+Lean proofs in Mathlib mostly stay in one area of mathematics. When a proof
+does leave its main area, the off-area steps come in runs, and the share of
+steps that move is no larger than judge disagreement alone would give. The
+lemmas those steps cite, by contrast, mix areas almost at random. We read
+this as a property of the library: Mathlib states cross-area facts as lemmas,
+so a proof crosses fields by citing a bridge lemma while its goal stays where
+it was. For provers, cross-area knowledge then sits in premise retrieval
+rather than in the shape of the goal state. A research formalization known
+for joining fields points the same way. In the polynomial Freiman--Ruzsa
+proof, judge areas switch more often than in Mathlib, 0.242 times per move,
+but against a shuffle of 0.352, a ratio of 0.69 close to Mathlib's 0.71: the
+proof mixes more areas and orders them in the same runs.
+
+The label-free model fails for a reason that matters beyond Lean. Goal-state
+text differs more between proofs than within one, so any geometry on goal
+states, clustered and coarse-grained, recovers proofs and a few long ones,
+not areas. Dynamics do not rescue it, whether the estimate is reversible or
+not. Areas have to be read from what a step is about, which today takes a
+judge, and the judge has to be checked.
 
 Proof depth is a crude clock. Two tactics can do very different amounts of
 work, and a single \texttt{simp} or \texttt{linarith} call can close a goal
-that would take a human several steps. Timescales measured in tactic steps
-therefore reflect Mathlib's proof style as much as the mathematics itself.
+that would take a human several steps. Switch rates per move therefore
+reflect Mathlib's proof style as much as the mathematics itself.
 
 \paragraph{Limitations.}
-The featurizer sees identifiers, not meaning, so goals that share notation
-but not ideas can land in the same microstate. The judges' labels are a
-reference, not ground truth: two models from one family may share biases,
-which their agreement cannot reveal, and top-level MSC codes are coarse for
-proofs that genuinely mix areas. The traced proofs come from one Mathlib
-snapshot and are filtered to long proofs, which may over-represent some areas.
-Finally, the search prover was trained on data that may overlap with the
-benchmarks, which affects the baseline and the area prior alike but limits
-what absolute numbers mean.
+A judge labels all steps of a proof in one call and gives bookkeeping goals
+the surrounding area, so some of the run structure could come from the
+judge. A control that shows each proof's steps in shuffled order, with their
+positions hidden, separates the two \todo{local and API controls}. The gold
+set checks whole statements, not single steps inside a library proof, and
+the two main judges come from one family; the local judge from another
+family agrees with them only weakly. Premise areas measure what a step uses,
+not what it is about, and cover a third of steps. A goal state can hold
+several open goals, which makes its area ill-defined after a case split
+\todo{share of multi-goal steps}. The traced proofs come from one Mathlib
+snapshot and are filtered to 8 or more steps, which may over-represent some
+areas. The search runs use a quantized prover at a small budget, and the
+prover was trained on data that may overlap with the benchmarks, which
+affects every condition alike but limits what absolute numbers mean.
