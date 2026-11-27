@@ -77,5 +77,25 @@ next project has the disk; the steps it already extracted stay in `results/cases
 3. To leave a stage out for good: `scripts/mac_queue.sh --skip sphere_packing`. To run a done
    stage again: `scripts/mac_queue.sh --retry pnt`. Both need the queue stopped.
 
+### Running one failed stage again before the next ones
+
+The queue reads its stages in order each time it starts, so a failed stage runs again before any
+later stage that has not finished. To fix a failed extraction while a later stage is running:
+
+```
+scripts/mac_queue.sh --stop      # the running stage saves its work and stops
+scripts/mac_queue.sh --status    # wait until it says "Queue not running"
+git pull                         # only while the queue is stopped: bash reads a script as it runs
+scripts/mac_queue.sh             # the failed stage runs first, then the stopped one resumes
+```
+
+Stop it while the search is running rather than mid-extraction, if you can: an extraction that
+is stopped keeps its build files (about 12 GB) until it resumes, which can leave too little disk
+for the failed one.
+
+A project in which a module does not compile at the pinned commit is not a failure: Lake builds
+everything else, the module (and anything in the project that imports it) is left out and listed
+in `results/cases/<name>/state/build_failed.txt`, and the extraction goes on.
+
 A stage whose extraction finishes with a few files failing is still done: those files are
 listed in `results/cases/<name>/raw/failed.txt`, and the rest of the project is used.

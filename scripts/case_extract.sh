@@ -45,7 +45,8 @@ export PATH="$HOME/.elan/bin:$PATH"
 say() { printf '[%s %s] %s\n' "$NAME" "$(date '+%H:%M')" "$*"; }
 done_mark() { mkdir -p "$STATE"; date '+%Y-%m-%d %H:%M' > "$STATE/stage$1.done"; }
 is_done() { [ -f "$STATE/stage$1.done" ]; }
-files() { "$PY" -m markov_lean.case_study files "$CONFIG" "$CASE_DIR"; }
+# the included files, less any module that failed to build (stage 2 lists them in build_failed.txt)
+files() { "$PY" -m markov_lean.case_study files "$CONFIG" "$CASE_DIR" --skip "$STATE/build_failed.txt"; }
 toolchain_dir() { sed -e 's#/#--#' -e 's#:#---#' "$CASE_DIR/lean-toolchain" | tr -d '[:space:]'; }
 MATHLIB_CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/mathlib
 free_gb() { local d=$1; while [ ! -d "$d" ]; do d=$(dirname "$d"); done; df -Pk "$d" | awk 'NR==2 {print int($4 / 1048576)}'; }
@@ -66,6 +67,7 @@ if [ "${2:-}" = "--status" ]; then
   if [ -d "$OUT/raw" ] && [ -d "$CASE_DIR" ]; then
     echo "extracted modules: $(ls "$OUT/raw" | grep -c '\.jsonl$' || true) of $(files | wc -l | tr -d ' ')"
     [ -s "$OUT/raw/failed.txt" ] && echo "modules that failed to extract: $(wc -l < "$OUT/raw/failed.txt" | tr -d ' ')"
+    [ -s "$STATE/build_failed.txt" ] && echo "modules left out because they failed to build: $(tr '\n' ' ' < "$STATE/build_failed.txt")"
   fi
   exit 0
 fi
@@ -94,7 +96,18 @@ fi
 if [ "${2:-}" = "--inner" ]; then
   cd "$CASE_DIR"
   case "$3" in
-    build) files | sed -e 's#\.lean$##' -e 's#/#.#g' | xargs lake build ;;
+    build)
+      # A module that does not compile at the pinned commit (an orphan file the project's own
+      # build never imports, say) is left out rather than failing the project: Lake builds the
+      # rest anyway, so record what it names and go on. Any other failure is retried by the guard.
+      if files | sed -e 's#\.lean$##' -e 's#/#.#g' | xargs lake build 2>&1 | tee "$STATE/build_last.log"; then exit 0; fi
+      bad=$("$PY" -m markov_lean.case_study build-failures "$STATE/build_last.log")
+      [ -n "$bad" ] || exit 1
+      printf '%s\n' "$bad" >> "$STATE/build_failed.txt"
+      echo "[$NAME] $(printf '%s\n' "$bad" | wc -l | tr -d ' ') module(s) failed to build and are left out (state/build_failed.txt):"
+      printf '  %s\n' $bad
+      # build again without them, so the guard only reports "done" once everything left has built
+      files | sed -e 's#\.lean$##' -e 's#/#.#g' | xargs lake build ;;
     extract)
       mkdir -p "$OUT/raw"
       one() {  # file -> $OUT/raw/<module>.jsonl, written via .tmp so a stop leaves no partial file

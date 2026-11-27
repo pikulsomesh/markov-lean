@@ -9,7 +9,9 @@ mathlib: v4.36.0
 root: PrimeNumberTheoremAnd
 target: PrimeNumberTheoremAnd
 include: ["PrimeNumberTheoremAnd/*.lean", "PrimeNumberTheoremAnd/Mathlib/**/*.lean"]
-exclude: []
+# Mathlib/NumberTheory/Chebyshev.lean does not compile against the pinned Mathlib (it uses
+# Finset.factorization_lcm); PNT+'s own build never imports it (only the excluded IEANTN folder does).
+exclude: ["PrimeNumberTheoremAnd/Mathlib/NumberTheory/Chebyshev.lean"]
 areas:
   Fourier: "42"
   Sobolev: "42"
