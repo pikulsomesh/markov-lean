@@ -69,8 +69,10 @@ def module_path(module: str) -> str:
     return ".lake/packages/mathlib/" + rel if module.split(".")[0] == "Mathlib" else rel
 
 
-def build_tables(records: Iterable[dict], min_steps: int = 1) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """`steps` table and per-step premises. A proof is one declaration in one module."""
+def build_tables(records: Iterable[dict], min_steps: int = 1, source: str = "pfr") -> tuple[pd.DataFrame, pd.DataFrame]:
+    """`steps` table and per-step premises. A proof is one declaration in one module.
+
+    ``source`` names the project in proof ids (``pfr:<name>``) and in the source and split columns."""
     by_proof: dict[tuple[str, str], list[dict]] = {}
     for r in records:
         if is_focusing_dot(r["tactic"]):
@@ -82,9 +84,9 @@ def build_tables(records: Iterable[dict], min_steps: int = 1) -> tuple[pd.DataFr
         seen[name] += 1
         if len(rs) < min_steps:
             continue
-        pid = f"pfr:{name}" if seen[name] == 1 else f"pfr:{name}#{seen[name]}"
+        pid = f"{source}:{name}" if seen[name] == 1 else f"{source}:{name}#{seen[name]}"
         for i, r in enumerate(rs):
-            steps.append({"proof_id": pid, "step": i, "source": "pfr", "split": "pfr", "theorem": name,
+            steps.append({"proof_id": pid, "step": i, "source": source, "split": source, "theorem": name,
                           "file_path": r.get("file_path") or module_path(module), "tactic": r["tactic"],
                           "state_before": r["state_before"], "state_after": r["state_after"],
                           "true_area": None})

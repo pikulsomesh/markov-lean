@@ -1,0 +1,20 @@
+# Sphere eversion (Massot, Nash, van Doorn): Gromov's h-principle by convex integration.
+# Global analysis on manifolds (58) and manifolds (57), with loops and convexity from analysis.
+name: sphere_eversion
+repo: https://github.com/leanprover-community/sphere-eversion
+rev: 33ab3d626854a0f0f04ed5772e3102d652e96475
+toolchain: leanprover/lean4:v4.35.0
+mathlib: v4.35.0
+root: SphereEversion
+target: SphereEversion
+include: ["SphereEversion/**/*.lean"]
+exclude: ["SphereEversion/Unused/*"]
+mirrors: [ToMathlib]
+areas:
+  Loops: "58"
+  Local: "58"
+  Global: "57"
+  Main: "57"
+  InductiveConstructions: "54"
+  Indexing: null
+  Notations: null

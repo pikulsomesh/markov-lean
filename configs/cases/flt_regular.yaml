@@ -1,0 +1,19 @@
+# Fermat's Last Theorem for regular primes (Kummer): algebraic number theory throughout (11).
+# A within-area control.
+name: flt_regular
+repo: https://github.com/leanprover-community/flt-regular
+rev: 44c57d474ca2929edfa522baa5d3eedbfa9b3a8d
+toolchain: leanprover/lean4:v4.37.0-rc1
+mathlib: 31ce06ea
+root: FltRegular
+target: FltRegular
+include: ["FltRegular/**/*.lean"]
+exclude: []
+default: "11"
+areas:
+  NumberTheory: "11"
+  SmallNumbers: "11"
+  CaseI: "11"
+  CaseII: "11"
+  MayAssume: "11"
+  FltRegular: "11"

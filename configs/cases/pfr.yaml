@@ -1,0 +1,41 @@
+# teorth/pfr: polynomial Freiman-Ruzsa via entropy (additive combinatorics 11 + information theory 94).
+# Module table copied from configs/pfr_msc.yaml (the exact PFR run); PFR/Mathlib/* is Mathlib.
+name: pfr
+repo: https://github.com/teorth/pfr
+rev: 1899ce8ed95fc310cce53d4c7ecfa2beb20ebec4
+toolchain: leanprover/lean4:v4.37.0-rc1
+mathlib: c47f9ad906c5ec32a953f99911b446cd26dcc123
+root: PFR
+target: PFR
+include: ["PFR/**/*.lean"]
+exclude: ["PFR/Tactic/*"]
+mirrors: [ForMathlib]
+areas:
+  ForMathlib/Entropy: "94"
+  ForMathlib/Entropy/RuzsaSetDist: "11"
+  ForMathlib/FiniteRange: "60"
+  ForMathlib/ConditionalIndependence: "60"
+  ForMathlib/FourVariables: "94"
+  ForMathlib/ThreeVariables: "94"
+  ForMathlib/Pair: "60"
+  ForMathlib/Uniform: "60"
+  ForMathlib/AffineSpaceDim: "15"
+  Kullback: "94"
+  MoreRuzsaDist: "94"
+  BoundingMutual: "94"
+  Fibring: "94"
+  FirstEstimate: "94"
+  SecondEstimate: "94"
+  Endgame: "94"
+  TorsionEndgame: "94"
+  EntropyPFR: "94"
+  ImprovedPFR: "94"
+  RhoFunctional: "94"
+  TauFunctional: "94"
+  MultiTauFunctional: "94"
+  HundredPercent: "11"
+  Main: "11"
+  WeakPFR: "11"
+  HomPFR: "11"
+  ApproxHomPFR: "11"
+  Examples: "11"
