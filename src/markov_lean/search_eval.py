@@ -374,8 +374,8 @@ def plan_tasks(
 
 
 DEFAULT_COST = {
-    "hourly_usd": 0.8048,           # g6.xlarge on-demand, us-east-1 (check your region)
-    "ebs_usd_per_hour": 0.0274,     # 200 GB gp3 at $0.08/GB-month
+    "hourly_usd": 0.8048,           # g6.xlarge on-demand, us-east-1 and us-east-2 (check your region)
+    "ebs_usd_per_hour": 0.016,      # 100 GB gp3 at $0.08/GB-month plus a public IPv4 address
     "startup_hours": 0.4,           # setup check, vLLM load, Mathlib import
     "sec_per_expansion": 6.0,       # guess until a smoke run calibrates it
     "parallel_efficiency": 0.8,     # workers share one GPU and 4 vCPUs

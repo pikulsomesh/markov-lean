@@ -27,8 +27,8 @@ benchmarks:
     path: data/raw/deepseek_benchmarks/minif2f.jsonl
     format: jsonl
     splits: [test]          # 244 problems
-  putnam:
-    path: data/raw/PutnamBench
+  putnam:                   # pinned copy from scripts/fetch_gold_sources.sh (same commit as the gold set and the Mac)
+    path: data/raw/gold/PutnamBench
     format: putnam
     glob: lean4/src/*.lean
 
@@ -64,8 +64,8 @@ conditions:
     kwargs: {lam: 0.3}
 
 cost:
-  hourly_usd: 0.8048        # g6.xlarge on-demand, us-east-1; check the price in your region
-  ebs_usd_per_hour: 0.0274  # 200 GB gp3
+  hourly_usd: 0.8048        # g6.xlarge on-demand, us-east-1 and us-east-2 (Ohio); check your region
+  ebs_usd_per_hour: 0.016   # 100 GB gp3 ($0.011/h) plus the public IPv4 address ($0.005/h)
   startup_hours: 0.4
   sec_per_expansion: 6.0    # a guess; after a smoke run the estimate uses measured times
   parallel_efficiency: 0.8

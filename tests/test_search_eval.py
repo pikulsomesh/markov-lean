@@ -308,3 +308,25 @@ def test_append_ignores_a_cut_off_line(tmp_path):
     with open(d / "summary.jsonl", "a") as f:
         f.write('{"proof_id": "b"')   # crash mid-write
     assert se.done_ids(d / "summary.jsonl") == {"a"}
+
+
+def test_gpu_and_mac_b64_configs_match_the_mac_run():
+    """The AWS run and the bigger Mac run differ from each other only in the weights and the sampler,
+    and from the first Mac run only in the budget, so their budget curves line up."""
+    load = lambda n: yaml.safe_load((ROOT / "configs" / f"{n}.yaml").read_text())   # noqa: E731
+    mac, b64, gpu = load("search_eval_mac_overnight"), load("search_eval_mac_b64"), load("search_eval_gpu")
+    assert b64["budget"]["max_expansions"] == gpu["budget"]["max_expansions"] == 64
+    assert b64["budget"]["max_depth"] == gpu["budget"]["max_depth"]
+    assert mac["budget"]["max_expansions"] == 12
+    for name in ("lm", "area_l0.3", "random_l0.3"):
+        assert mac["conditions"][name] == b64["conditions"][name] == gpu["conditions"][name]
+    for key in ("seeds", "subset_seed", "msm_dir", "benchmarks"):
+        assert mac[key] == b64[key] == gpu[key], key
+    assert {k: v for k, v in b64["prover"].items()} == mac["prover"]
+    gcfg = se.EvalConfig.load(ROOT / "configs" / "search_eval_gpu.yaml")
+    assert gcfg.search_config["prover"]["n"] == mac["prover"]["n"] == 8
+    assert gcfg.search_config["prover"]["max_tokens"] == mac["prover"]["max_tokens"]
+    assert gcfg.search_config["prover"].get("backend", "vllm") != "llama_cpp"
+    assert gcfg.budget["max_expansions"] == 64
+    # the new results folders sort after mac_overnight, so the paper keeps reading it
+    assert sorted(["mac_overnight", "mac_overnight_b64", "search_gpu"])[0] == "mac_overnight"

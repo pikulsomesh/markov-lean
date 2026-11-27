@@ -1,0 +1,74 @@
+# Bigger-budget search comparison on the Mac Mini (M2, 16 GB): the same prover, conditions,
+# problems and sampling as configs/search_eval_mac_overnight.yaml, at 64 expansions instead of 12.
+# It answers "the budget was tiny": the budget curve in search-report gives the solve rate and the
+# paired gain at 12, 24, 48 and 64 expansions from this one run, and its 12-expansion point should
+# match the first Mac run.
+#
+# Run it after the first Mac runs, into its own folder (the name sorts after mac_overnight, so
+# `markov-lean paper` keeps reading results/mac_overnight until you point it here):
+#   CONFIG=configs/search_eval_mac_b64.yaml OUT=results/mac_overnight_b64 HOURS=168 scripts/mac_overnight.sh --estimate
+#   CONFIG=configs/search_eval_mac_b64.yaml OUT=results/mac_overnight_b64 HOURS=168 scripts/mac_overnight.sh
+# About 90 h of search for all 244 miniF2F problems under 3 conditions, plus pauses for runner jobs,
+# and about 1 GB of disk. Rerun the same command to resume. Plans: docs/search_eval.md.
+
+base_config: configs/search.yaml   # lean settings (project lean/, REPL in ~/repl)
+
+prover:
+  backend: llama_cpp
+  model_path: ~/models/deepseek-prover-v1.5-rl_q4_k_m.gguf   # or MODEL=... / --model-path
+  n: 8                      # samples per expansion, drawn one after another
+  temperature: 1.0
+  top_p: 0.95
+  max_tokens: 128           # generation stops at the end of the first tactic anyway
+  n_ctx: 4096
+  n_gpu_layers: -1          # every layer on the GPU (Metal)
+
+lean:
+  timeout: 60
+  startup_timeout: 900
+
+budget:                     # the same for every problem and condition
+  max_expansions: 64        # about 15 s each on the M2 (8 samples plus Lean)
+  wall_time: 1200           # a safety stop; 64 expansions take about 960 s
+  max_depth: 32
+
+seeds: [0]
+subset_seed: 0              # the fixed problem order; a stopped run is a prefix of it
+workers: 1                  # one model in memory; two would not fit in 16 GB with Lean
+
+msm_dir: results/pilot3/msm # the saved Markov model for the area conditions (or MSM_DIR=...)
+
+benchmarks:
+  minif2f:
+    path: data/raw/deepseek_benchmarks/minif2f.jsonl
+    format: jsonl
+    splits: [test]          # 244 problems
+  putnam:                   # 672 problems; run a prefix with LIMIT (docs/search_eval.md, "PutnamBench on the Mac")
+    path: data/raw/gold/PutnamBench   # pinned copy from scripts/fetch_gold_sources.sh, same commit as the gold set
+    format: putnam
+    glob: lean4/src/*.lean
+
+conditions:
+  lm:
+    factory: lm
+  area_l0.3:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  random_l0.3:
+    factory: markov_lean.search_eval:RandomPrior
+    kwargs: {lam: 0.3}
+  # Extra mixing weights, for a third night or once the core comparison is done.
+  area_l0.1:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.1, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  area_l0.6:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.6, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+
+cost:                       # local machine: no bill, so the estimate is in hours only
+  hourly_usd: 0.0
+  ebs_usd_per_hour: 0.0
+  startup_hours: 0.1        # model load and the first Mathlib import
+  sec_per_expansion: 15.0   # a guess; after the first problems the estimate uses measured times
+  parallel_efficiency: 1.0
+  expected_fraction: {minif2f: 0.45, putnam: 1.0}
