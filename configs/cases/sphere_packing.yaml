@@ -1,0 +1,26 @@
+# Sphere packing in dimension 8 (Viazovska), the human-led project. Modular forms (11F) give the
+# magic function, Fourier analysis (42) proves the Cohn-Elkies LP bound, discrete geometry (52)
+# states the packing result. About 60 proofs still end in sorry; they are dropped.
+name: sphere_packing
+repo: https://github.com/thefundamentaltheor3m/Sphere-Packing-Lean
+rev: 03cb63c9bf51a7c879f5ace0d88fc784c6e84121
+toolchain: leanprover/lean4:v4.37.0-rc1
+mathlib: 31ce06ea
+root: SpherePacking
+target: SpherePacking
+include: ["SpherePacking/**/*.lean"]
+exclude: ["SpherePacking/Tactic/*"]
+mirrors: [ForMathlib]
+areas:
+  Basic: "52"
+  MainTheorem: "52"
+  CohnElkies: "42"
+  CohnElkies/LPBound: "52"
+  MagicFunction: "42"
+  MagicFunction/a/Integrability: "26"
+  MagicFunction/a/IntegralEstimates: "26"
+  MagicFunction/PolyFourierCoeffBound: "11"
+  ModularForms: "11"
+  ModularForms/exp_lems: "30"
+  ModularForms/tsumderivWithin: "30"
+  ModularForms/ResToImagAxis: "30"

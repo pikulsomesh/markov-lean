@@ -1,0 +1,39 @@
+# PrimeNumberTheoremAnd (PNT+, Kontorovich and Tao): the classical analytic route to the prime
+# number theorem. Complex analysis (30) and Fourier analysis (42) prove number theory (11).
+# The IEANTN explicit-estimates folder (moving to teorth/IEANTN) and Unused are left out.
+name: pnt
+repo: https://github.com/AlexKontorovich/PrimeNumberTheoremAnd
+rev: 471f10c8164d59ed782680c5cd5d884e632e43c9
+toolchain: leanprover/lean4:v4.36.0
+mathlib: v4.36.0
+root: PrimeNumberTheoremAnd
+target: PrimeNumberTheoremAnd
+include: ["PrimeNumberTheoremAnd/*.lean", "PrimeNumberTheoremAnd/Mathlib/**/*.lean"]
+exclude: []
+areas:
+  Fourier: "42"
+  Sobolev: "42"
+  SmoothExistence: "42"
+  LaplaceInversion: "42"
+  Wiener: "42"
+  SincKernelErrorBounds: "42"
+  MellinCalculus: "44"
+  Rectangle: "30"
+  RectangleArgumentPrinciple: "30"
+  ResidueCalcOnRectangles: "30"
+  GeneralMeromorphic: "30"
+  BorelCaratheodory: "30"
+  HadamardFactorization: "30"
+  EulerMaclaurin: "26"
+  EulerMascheroniBounds: "26"
+  ZetaBounds: "11"
+  ZetaConj: "11"
+  MediumPNT: "11"
+  StrongPNT: "11"
+  PerronFormula: "11"
+  Consequences: "11"
+  Defs: "11"
+  IwaniecKowalskiCh1: "11"
+  BrunTitchmarsh: "11"
+  HoffsteinLockhart: "11"
+  Auxiliary: null

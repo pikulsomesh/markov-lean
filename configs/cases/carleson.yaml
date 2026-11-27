@@ -1,0 +1,27 @@
+# Carleson's theorem (van Doorn et al.): one big harmonic-analysis proof (42) on doubling metric
+# measure spaces. A within-area control for the cross-area projects.
+name: carleson
+repo: https://github.com/fpvandoorn/carleson
+rev: f7487cc9da4d1e73f009dc0280cd5b958f3e2c78
+toolchain: leanprover/lean4:v4.36.0-rc1
+mathlib: d8881435
+root: Carleson
+target: Carleson
+include: ["Carleson/**/*.lean"]
+exclude: []
+mirrors: [ToMathlib]
+default: "42"
+areas:
+  Classical: "42"
+  ForestOperator: "42"
+  TwoSidedCarleson: "42"
+  Discrete: "42"
+  MetricCarleson: "42"
+  Antichain: "42"
+  TileStructure: "42"
+  TileExistence: "42"
+  Psi: "42"
+  ProofData: "42"
+  Defs: "42"
+  CalderonZygmund: "42"
+  Operators: "42"

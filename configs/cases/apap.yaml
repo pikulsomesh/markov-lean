@@ -1,0 +1,30 @@
+# LeanAPAP (Bloom, Dillies, Mehta): Kelley-Meka bounds on 3-AP-free sets. Discrete Fourier
+# analysis (43) and almost-periodicity sampling prove additive combinatorics (11). The integer
+# theorem is still sorry; the finite-field one is done. Same Lean and Mathlib as PFR.
+name: apap
+repo: https://github.com/YaelDillies/LeanAPAP
+rev: b401f6e22417e6dbe6f87d6620571ea6c513aed3
+toolchain: leanprover/lean4:v4.37.0-rc1
+mathlib: c47f9ad906c5ec32a953f99911b446cd26dcc123
+root: APAP
+target: APAP
+include: ["APAP/**/*.lean"]
+exclude: []
+areas:
+  Prereqs/Convolution: "43"
+  Prereqs/Convolution/ThreeAP: "11"
+  Prereqs/FourierTransform: "43"
+  Prereqs/LpNorm: "43"
+  Prereqs/Inner: "43"
+  Prereqs/Rudin: "43"
+  Prereqs/Bohr: "11"
+  Prereqs/Chang: "11"
+  Prereqs/LargeSpec: "11"
+  Prereqs/Energy: "11"
+  Prereqs/Mu: "60"
+  Prereqs/DummyPositivity: null
+  Physics/AlmostPeriodicity: "11"
+  Physics/DRC: "05"
+  Physics/Unbalancing: "11"
+  FiniteField: "11"
+  Integer: "11"

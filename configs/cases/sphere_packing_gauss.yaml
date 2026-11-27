@@ -1,0 +1,26 @@
+# Sphere packing, dimension-8 part of the completed Math Inc repo (finished largely by their
+# Gauss agent, so mostly AI-written; Lean v4.28). A contrast to the human-led project:
+# same mathematics, different authors. Dimension 24 is left out.
+name: sphere_packing_gauss
+repo: https://github.com/math-inc/Sphere-Packing-Lean
+rev: 1e98fb493088948ca7bbf47d7faed49cc5b39fc4
+toolchain: leanprover/lean4:v4.28.0
+root: SpherePacking
+target: SpherePacking
+include: ["SpherePacking/Dim8/**/*.lean", "SpherePacking/ModularForms/**/*.lean", "SpherePacking/CohnElkies/**/*.lean",
+          "SpherePacking/Contour/**/*.lean", "SpherePacking/Integration/**/*.lean", "SpherePacking/Basic/**/*.lean",
+          "SpherePacking/MagicFunction/**/*.lean", "SpherePacking/ForMathlib/**/*.lean", "SpherePacking/*.lean"]
+exclude: []
+mirrors: [ForMathlib]
+areas:
+  Basic: "52"
+  Dim8/E8: "52"
+  Dim8/MainTheorem: "52"
+  Dim8/UpperBound: "52"
+  Dim8/ScaledMagic: "42"
+  Dim8/MagicFunction: "42"
+  MagicFunction: "42"
+  CohnElkies: "42"
+  ModularForms: "11"
+  Contour: "30"
+  Integration: "26"
