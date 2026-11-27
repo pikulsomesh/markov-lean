@@ -1,0 +1,54 @@
+# The one AWS run: the unquantized DeepSeek-Prover-V1.5-RL (bf16, vLLM on the g6.xlarge's L4) at the
+# same budget, sampling and conditions as the bigger Mac run (configs/search_eval_mac_b64.yaml). The Mac
+# runs use a 4-bit GGUF; this run shows whether the quantized weights or llama.cpp's sampler explain
+# the result. Its budget curve also gives the 12-expansion point of the first Mac run.
+#
+# On the instance (docs/search_eval.md, "The AWS run"):
+#   markov-lean search-eval --config configs/search_eval_gpu.yaml --out results/search_gpu --estimate
+# About 13 h of search for 244 problems x 3 conditions at 3 workers; cap it with --max-usd.
+# Nothing in this repo calls the AWS API: you launch and stop the instance.
+
+base_config: configs/search.yaml   # vLLM endpoint, model and Lean settings
+
+prover:
+  n: 8                      # samples per expansion, as on the Mac (search.yaml has 16)
+  max_tokens: 128           # as on the Mac; one tactic rarely needs more
+
+budget:                     # the same as configs/search_eval_mac_b64.yaml
+  max_expansions: 64
+  wall_time: 600            # a safety stop; 64 expansions take about 320 s here
+  max_depth: 32
+
+seeds: [0]
+subset_seed: 0              # the same fixed problem order as the Mac runs
+workers: 3                  # search processes sharing the one vLLM server; use --workers 2 if memory is tight
+
+msm_dir: results/pilot3/msm # copied from the Mac (docs/search_eval.md)
+
+benchmarks:
+  minif2f:
+    path: data/raw/deepseek_benchmarks/minif2f.jsonl
+    format: jsonl
+    splits: [test]          # 244 problems
+  putnam:
+    path: data/raw/gold/PutnamBench   # pinned copy from scripts/fetch_gold_sources.sh, as on the Mac
+    format: putnam
+    glob: lean4/src/*.lean
+
+conditions:                 # the same specs as the Mac configs
+  lm:
+    factory: lm
+  area_l0.3:
+    factory: markov_lean.prior_loader:build_area_prior
+    kwargs: {lam: 0.3, use_coarse_T: true, diversity_alpha: 0.0, escape_strength: 0.0}
+  random_l0.3:
+    factory: markov_lean.search_eval:RandomPrior
+    kwargs: {lam: 0.3}
+
+cost:
+  hourly_usd: 0.8048        # g6.xlarge on-demand in us-east-2 (Ohio)
+  ebs_usd_per_hour: 0.016   # 100 GB gp3 ($0.011/h) plus the public IPv4 address ($0.005/h)
+  startup_hours: 0.4        # vLLM load and the first Mathlib import, per session
+  sec_per_expansion: 5.0    # a guess (8 samples on the L4 plus Lean); after the smoke run the estimate uses measured times
+  parallel_efficiency: 0.8
+  expected_fraction: {minif2f: 0.45, putnam: 0.95}
