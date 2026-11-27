@@ -86,3 +86,23 @@ def test_configs_load_and_files(tmp_path):
     (tmp_path / "PFR" / "Tactic" / "T.lean").write_text("")
     cfg = sc.load_case(Path(__file__).parents[1] / "configs" / "cases" / "pfr.yaml")
     assert case_study.case_files(cfg, tmp_path) == ["PFR/A.lean"]
+
+
+def test_build_failures_and_dependents(tmp_path):
+    from markov_lean.case_study import build_failures, without
+    log = """✔ [8392/8395] Built P.IEANTN.LogTables (8.4s)
+Some required targets logged failures:
+- P.Mathlib.NumberTheory.Chebyshev
+- +P.Other:olean
+error: build failed
+"""
+    assert build_failures(log) == ["P.Mathlib.NumberTheory.Chebyshev", "P.Other"]
+    assert build_failures("all good") == []
+    (tmp_path / "P/Mathlib/NumberTheory").mkdir(parents=True)
+    (tmp_path / "P/Mathlib/NumberTheory/Chebyshev.lean").write_text("module\npublic import Mathlib.NumberTheory.Chebyshev\n")
+    (tmp_path / "P/Uses.lean").write_text("module\n\npublic import P.Mid\n")
+    (tmp_path / "P/Mid.lean").write_text("import P.Mathlib.NumberTheory.Chebyshev\n")
+    (tmp_path / "P/Fine.lean").write_text("import Mathlib.Data.Nat.Basic\n")
+    files = ["P/Fine.lean", "P/Mathlib/NumberTheory/Chebyshev.lean", "P/Mid.lean", "P/Uses.lean"]
+    assert without(files, tmp_path, {"P.Mathlib.NumberTheory.Chebyshev"}) == ["P/Fine.lean"]
+    assert without(files, tmp_path, set()) == files

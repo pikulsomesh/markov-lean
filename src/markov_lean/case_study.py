@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -49,6 +50,56 @@ def free_labels(steps: pd.DataFrame, prem: pd.DataFrame, amap: AreaMap, cmap: Ca
         "premise_area": df["premise_paths"].map(lambda ps: prem_area(ps, mirror)),
         "premise_own_area": df["premise_paths"].map(lambda ps: prem_area(ps, own)),
     })
+
+
+def build_failures(log: str) -> list[str]:
+    """Modules a failed ``lake build`` names under "Some required targets logged failures:"."""
+    out, inside = [], False
+    for line in log.splitlines():
+        t = line.strip()
+        if t.startswith("Some required targets logged failures"):
+            inside = True
+            continue
+        if inside:
+            if t.startswith("- "):
+                m = t[2:].strip().lstrip("+").split(":")[0].strip()
+                if m and m not in out:
+                    out.append(m)
+            else:
+                inside = False
+    return out
+
+
+_IMPORT = re.compile(r"^\s*(?:public\s+|private\s+)?(?:meta\s+)?import\s+([\w.']+)", re.M)
+
+
+def without(files: list[str], checkout: str | Path, skip: set[str]) -> list[str]:
+    """``files`` less the modules in ``skip`` and every module of the checkout that imports one,
+    directly or through other modules of the checkout (they cannot build either)."""
+    root = Path(checkout).expanduser()
+    cache: dict[str, list[str]] = {}
+
+    def imports(mod: str) -> list[str]:
+        if mod not in cache:
+            p = root / (mod.replace(".", "/") + ".lean")
+            cache[mod] = _IMPORT.findall(p.read_text(errors="replace")) if p.exists() else []
+        return cache[mod]
+
+    bad = set(skip)
+    memo: dict[str, bool] = {}
+
+    def broken(mod: str, path: tuple = ()) -> bool:
+        if mod in bad:
+            return True
+        if mod in memo:
+            return memo[mod]
+        if mod in path:
+            return False
+        memo[mod] = any(broken(m, path + (mod,)) for m in imports(mod)
+                        if (root / (m.replace(".", "/") + ".lean")).exists())
+        return memo[mod]
+
+    return [f for f in files if not broken(f[:-len(".lean")].replace("/", "."))]
 
 
 def case_files(cfg: dict, checkout: str | Path) -> list[str]:
@@ -105,13 +156,25 @@ def main(argv: list[str] | None = None) -> int:
     m = sub.add_parser("files", help="the project's .lean files the config includes, one per line")
     m.add_argument("config")
     m.add_argument("checkout")
+    m.add_argument("--skip", help="file of module names to leave out (modules that failed to build)")
+    b = sub.add_parser("build-failures", help="modules a failed lake build log names, one per line")
+    b.add_argument("log")
     args = ap.parse_args(argv)
     if args.cmd == "field":
         v = load_case(args.config).get(args.key)
         print(" ".join(v) if isinstance(v, list) else ("" if v is None else v))
         return 0
     if args.cmd == "files":
-        print("\n".join(case_files(load_case(args.config), args.checkout)))
+        skip = set()
+        if args.skip and Path(args.skip).exists():
+            skip = {m.strip() for m in Path(args.skip).read_text().splitlines() if m.strip()}
+        files = case_files(load_case(args.config), args.checkout)
+        if skip:
+            files = without(files, args.checkout, skip)
+        print("\n".join(files))
+        return 0
+    if args.cmd == "build-failures":
+        print("\n".join(build_failures(Path(args.log).read_text(errors="replace"))))
         return 0
     s = convert(args.config, args.raw, args.out, args.map)
     print(f"{s['case']}: {s['proofs']} proofs, {s['steps']} steps from {s['modules']} modules -> {args.out}")
