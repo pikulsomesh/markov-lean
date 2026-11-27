@@ -1,14 +1,41 @@
-# Search evaluation runbook (EC2 g6.xlarge)
+# Search evaluation runbook
 
 `markov-lean search-eval` runs best-first proof search on miniF2F (test, 244 problems) and
 PutnamBench under named prior conditions with fixed budgets, and `markov-lean
 search-report` turns the logs into pass@k tables, paired tests, per-area tables and figures.
-Everything here runs on one g6.xlarge (NVIDIA L4 24 GB, 4 vCPU, 16 GB RAM) that you launch
-and stop yourself. Nothing in this repo calls the AWS API.
+It runs on the Mac Mini (M2, 16 GB) with a 4-bit local prover, or on one EC2 g6.xlarge
+(NVIDIA L4 24 GB, 4 vCPU, 16 GB RAM) with the unquantized prover behind vLLM, which you
+launch and stop yourself. Nothing in this repo calls the AWS API.
+
+## The plan: Mac first, one AWS run
+
+The AWS credit is a one-time $100, so the Mac does everything it can and AWS does only what the
+Mac can't: run the unquantized model.
+
+| run | where | config and folder | search time | cost |
+|---|---|---|---|---|
+| miniF2F, 12 expansions, 3 conditions | Mac | `search_eval_mac_overnight.yaml`, `results/mac_overnight` | done | none |
+| PutnamBench 150, 12 expansions | Mac | same | about 23 h | none |
+| miniF2F, 64 expansions, 3 conditions | Mac | `search_eval_mac_b64.yaml`, `results/mac_overnight_b64` | about 90 h plus pauses, about 1 GB of disk | none |
+| miniF2F, 64 expansions, 3 conditions, unquantized | AWS | `search_eval_gpu.yaml`, `results/search_gpu` | about 13 h | about $12 expected, capped at $20 |
+
+The two 64-expansion runs share the budget, sampling (8 samples per expansion), conditions and
+problem order, so their difference is the weights and the sampler. `budget.csv` and
+`budget_gain.csv` give each run's solve rate and paired gain at every budget up to 64, so the
+12-expansion point of the AWS run also checks the first Mac run.
+
+Not planned: PutnamBench at 64 expansions (150 problems x 3 conditions is about 120 h on the Mac
+or about $27 on AWS, for a handful of solved problems at most), and more conditions on AWS
+(each one adds about a third to the time and cost). Add them on the Mac if the core runs leave
+room: `CONDITIONS="lm area_l0.3 random_l0.3 area_l0.6"`; finished problems are skipped.
+
+Folder names matter: `markov-lean paper` reads `results/search_eval` if it holds runs, else the
+first folder under `results/` in name order that does. `mac_overnight_b64` and `search_gpu` sort
+after `mac_overnight`, so the paper keeps its current numbers until you point it at the new runs.
 
 ## What one run is
 
-* A **condition** is a prior from `configs/search_eval.yaml`:
+* A **condition** is a prior from the config (`configs/search_eval.yaml` lists all of them):
 
   | condition | what it tests |
   |---|---|
@@ -19,8 +46,9 @@ and stop yourself. Nothing in this repo calls the AWS API.
   | `full` | transition target, diversity and stuck escape together |
   | `random_l0.3` | control: random scores mixed in with the same rule and weight |
 
-* **Budgets** are the same for every problem and condition: 64 expansions (prover calls),
-  300 s wall time, depth 32 (`budget` in the config). Each summary line records them.
+* **Budgets** are the same for every problem and condition within a run: expansions (prover
+  calls), a wall-time safety stop and a depth limit (`budget` in the config). Each summary
+  line records them.
 * **Seeds** go to vLLM as the sampling seed, so at a given goal state every condition sees
   the same tactic samples. One seed gives pass@1; more seeds give pass@k over seeds.
 * **Order**: problems run in a fixed random order (`subset_seed`), all conditions of a
@@ -33,81 +61,109 @@ Logs go to `<out>/<benchmark>/<condition>/seed<k>/` as `summary.jsonl` and `trac
 (schema in `docs/schema.md`), plus `trace.parquet` and `steps.parquet` at the end of a run.
 `<out>/runs.jsonl` records each invocation (commit, budgets, conditions, prover settings).
 
-## Cost plans
+## The AWS run
 
-`--estimate` prints the plan before anything runs. The numbers below are its first guesses
-for 3 workers at $0.83/h (g6.xlarge on-demand in us-east-1 plus a 200 GB disk); the guess
-assumes about 6 s per expansion. After the smoke run the estimate switches to measured times
-per problem, so rerun `--estimate` before each step.
+### Costs
 
-| step | command flags | expected | worst case |
-|---|---|---|---|
-| 1 smoke | `--benchmark minif2f --limit 5 --condition lm --condition area_l0.3` | 0.6 h, $0.50 | $0.60 |
-| 2 core miniF2F | `--benchmark minif2f --condition lm --condition area_l0.3 --condition full --condition random_l0.3` | 19 h, $16 | $29 |
-| 3 ablations miniF2F | `--benchmark minif2f --condition area_l0.1 --condition area_l0.6 --condition diversity --condition stuck_escape` | 19 h, $16 | $29 |
-| 4 PutnamBench subset | `--benchmark putnam --limit 150 --condition lm --condition full --condition random_l0.3` | 15 h, $13 | $13 |
+g6.xlarge on-demand is $0.8048 an hour in us-east-2 (Ohio), plus about $0.016 an hour for the
+100 GB disk and the public IPv4 address while it exists. Billing runs from launch until you stop
+the instance, whether or not a search is running. A stopped instance still pays for its disk
+(about $8 a month); terminate it once the results are on the Mac.
 
-Steps 1, 2 and 4 come to about $30 expected; all four to about $46 of the $100 credit.
-PutnamBench problems mostly fail, so they use their full wall time and cost about $0.10
-each per condition: grow `--limit` rather than adding conditions there. Use `--max-usd`
-on every long run as a hard stop (it stops taking new problems once that much instance
-time has passed; the problems in flight finish).
+| step | hours | expected |
+|---|---|---|
+| setup (vLLM, Lean and Mathlib, the REPL, the model download) | about 1.5 | $1.25 |
+| smoke test, 5 problems x 3 conditions | about 0.5 | $0.40 |
+| main run, 244 problems x 3 conditions, 3 workers | about 13 | $11 |
+| a later start to copy the results back, then terminate | about 0.2 | $0.15 |
 
-## One-time setup
+About $12 to $13 in all. The search time is a guess of 5 s per expansion until the smoke test
+measures it; rerun `--estimate` after the smoke test before starting the main run. `--max-usd 20`
+on the main run is a hard stop on new problems (problems in flight finish, about 30 minutes at
+most), so the whole session stays under about $22 even if the guess is badly off. A stopped run
+is a prefix of the fixed problem order and is still a paired comparison. With `--workers 2`
+(if memory is tight) the run takes about half as long again.
 
-From your laptop, after launching the instance (Ubuntu Deep Learning AMI, 200 GB gp3,
-security group with SSH from your IP only):
+### Launch
+
+In the EC2 console, region **US East (Ohio)** (the GPU quota is there): Deep Learning Base AMI
+with Single CUDA (Ubuntu 24.04), instance type g6.xlarge, your key pair, SSH from your IP only,
+100 GiB gp3. The account's "Running On-Demand G and VT instances" quota must be at least 4.
+
+### Setup, once per instance
+
+On the Mac Mini, note the Mathlib tag the Mac runs use, so both machines check proofs alike:
 
 ```bash
-ssh ubuntu@<ip>
+cat results/mac/mathlib_tag.txt     # or: sed -n 's/^rev = "\(.*\)"/\1/p' lean/lakefile.toml
+```
+
+On the instance (`ssh -i ~/.ssh/<key>.pem ubuntu@<public-ip>`):
+
+```bash
+tmux new -s setup                   # reattach after a dropped connection: tmux attach -t setup
 git clone https://github.com/pikulsomesh/markov-lean && cd markov-lean
-bash scripts/setup_ec2.sh            # vLLM, this package, Lean + Mathlib, the REPL
-.venv/bin/markov-lean fetch minif2f putnam
+MATHLIB_TAG=<tag> bash scripts/setup_ec2.sh
+.venv/bin/markov-lean fetch minif2f
+bash scripts/fetch_gold_sources.sh  # only for PutnamBench
 ```
 
-The area conditions need the saved Markov model (written by `markov-lean pilot` after PR
-#13). Copy it from the Mac Mini; it holds a pickle, so only copy a directory you produced:
+The area condition needs the saved Markov model. From the Mac Mini, in the repo (it holds a
+pickle, so only copy a folder you produced):
 
 ```bash
-# on the Mac Mini, from the repo root
-ssh ubuntu@<ip> mkdir -p markov-lean/results/pilot3
-scp -r results/pilot3/msm ubuntu@<ip>:markov-lean/results/pilot3/
+ssh -i ~/.ssh/<key>.pem ubuntu@<public-ip> mkdir -p markov-lean/results/pilot3
+scp -i ~/.ssh/<key>.pem -r results/pilot3/msm ubuntu@<public-ip>:markov-lean/results/pilot3/
 ```
 
-If it lives elsewhere, pass `--msm-dir <path>` or edit `msm_dir` in the config.
-
-## Each session
+### Run
 
 ```bash
-ssh ubuntu@<ip>
-cd markov-lean && git pull
-tmux new -s eval                      # keeps the run alive if SSH drops; reattach: tmux attach -t eval
-bash scripts/serve_prover.sh          # waits until vLLM answers
+tmux new -s eval                    # reattach: tmux attach -t eval
+cd ~/markov-lean
+bash scripts/serve_prover.sh        # waits until vLLM answers; the first start downloads ~14 GB
 .venv/bin/python -m markov_lean.search --check --config configs/search.yaml
 
-E=".venv/bin/markov-lean search-eval --config configs/search_eval.yaml --out results/search_eval"
+E=".venv/bin/markov-lean search-eval --config configs/search_eval_gpu.yaml --out results/search_gpu --benchmark minif2f --condition lm --condition area_l0.3 --condition random_l0.3"
 
-# 1. smoke: checks the whole path and calibrates the estimate
-$E --benchmark minif2f --limit 5 --condition lm --condition area_l0.3 --estimate
-$E --benchmark minif2f --limit 5 --condition lm --condition area_l0.3 --yes
+# smoke test: 5 problems; they count toward the main run
+$E --limit 5 --yes
+free -h; nvidia-smi                 # memory headroom; if "available" is under 2 GB, add --workers 2 below
 
-# 2. core miniF2F (look at the estimate first)
-$E --benchmark minif2f --condition lm --condition area_l0.3 --condition full --condition random_l0.3 --estimate
-$E --benchmark minif2f --condition lm --condition area_l0.3 --condition full --condition random_l0.3 --yes --max-usd 20
-
-# 3. ablations, 4. PutnamBench subset: same pattern with the flags from the table above
+# main run: check the estimate, then run, write the report, pack the small files and stop the instance
+$E --estimate
+$E --yes --max-usd 20; .venv/bin/markov-lean search-report --runs results/search_gpu; \
+  tar czf ~/search_gpu_small.tgz results/search_gpu/runs.jsonl results/search_gpu/report \
+      $(find results/search_gpu -name summary.jsonl); sudo shutdown -h now
 ```
 
-Watch memory in a second tmux pane with `free -h` and `nvidia-smi`. Each worker runs its own
-Lean REPL with Mathlib loaded (Mathlib's files are memory-mapped and shared, so this is
-mostly fine). If memory gets tight, use `--workers 2`; the run resumes where it stopped.
+Leave tmux with Ctrl-B then D; the run goes on. Status, from the instance or from the Mac:
 
-To stop a run: Ctrl-C. Finished problems are saved; rerun the same command to resume.
+```bash
+ssh -i ~/.ssh/<key>.pem ubuntu@<public-ip> 'wc -l markov-lean/results/search_gpu/minif2f/*/seed0/summary.jsonl'
+```
+
+Each file reaches 244 lines when its condition is done. To stop early: Ctrl-C in tmux, then
+`sudo shutdown -h now`; rerunning the same `$E --yes` command resumes.
+
+### Results back to the Mac, then terminate
+
+The instance stops itself after the main run. Start it again in the console (its public IP
+changes), then from the Mac, in the repo:
+
+```bash
+scp -i ~/.ssh/<key>.pem ubuntu@<new-ip>:search_gpu_small.tgz . && tar xzf search_gpu_small.tgz && rm search_gpu_small.tgz
+```
+
+That is the summaries, `runs.jsonl` and the report: a few MB. The traces (`trace.jsonl`, about a
+GB) stay on the instance; copy them too only if a later analysis needs them. Then stop the
+instance, check that it shows **Stopped**, and terminate it (Instance state, Terminate) so the
+disk stops billing.
 
 ## Report
 
 ```bash
-.venv/bin/markov-lean search-report --runs results/search_eval
+.venv/bin/markov-lean search-report --runs results/search_gpu
 # or several roots, or a glob of benchmark folders; the report goes to their common parent
 .venv/bin/markov-lean search-report --runs results/search_eval/* --out results/search_report \
     --label 'lm=LM only ($\lambda = 0$)' --label 'area_l0.3=Area prior ($\lambda = 0.3$)'
@@ -133,33 +189,6 @@ The `.tex` files are bare `tabular`s to `\input` inside a `table`. `--label NAME
 `--bench-label NAME=LATEX` set row and column names (benchmarks default to miniF2F and
 PutnamBench). To try it without a GPU: `markov-lean search-report --runs tests/fixtures/search_runs/*`
 (synthetic runs, see `tests/search_fixture.py`).
-
-Copy results back to the Mac Mini before stopping the instance:
-
-```bash
-# on the Mac Mini
-rsync -av ubuntu@<ip>:markov-lean/results/search_eval/ results/search_eval/
-```
-
-## Stop the instance
-
-The instance bills by the second while it runs, whether or not a search is running.
-
-```bash
-kill $(pgrep -f "vllm serve")   # optional; stopping the instance ends it anyway
-sudo shutdown -h now            # from the instance; stops it if its shutdown behaviour is "stop" (the default)
-```
-
-Or stop it in the EC2 console (Instances, select it, Instance state, Stop instance), or from
-your laptop with `aws ec2 stop-instances --instance-ids <id>`. Check in the console that it
-shows **Stopped**. A stopped instance still pays for its disk (about $16 a month for
-200 GB); terminate it when the project no longer needs it.
-
-To end a long run and stop the instance in one go:
-
-```bash
-$E <flags> --yes --max-usd 20; sudo shutdown -h now
-```
 
 ## On the Mac Mini (no GPU)
 
@@ -208,6 +237,22 @@ know which plan you need. The `random_l0.3` comparison uses the same test with H
 Other conditions (`area_l0.1`, `area_l0.6`) are in the config: add them with
 `CONDITIONS="lm area_l0.3 random_l0.3 area_l0.6"` once the core comparison is done; finished
 problems are skipped.
+
+### Bigger budget on the Mac
+
+`configs/search_eval_mac_b64.yaml` is the same run at 64 expansions (wall time 1200 s, depth 32).
+Start it after the PutnamBench run has finished, into its own folder:
+
+```bash
+CONFIG=configs/search_eval_mac_b64.yaml OUT=results/mac_overnight_b64 HOURS=168 scripts/mac_overnight.sh --estimate
+CONFIG=configs/search_eval_mac_b64.yaml OUT=results/mac_overnight_b64 HOURS=168 scripts/mac_overnight.sh
+CONFIG=configs/search_eval_mac_b64.yaml OUT=results/mac_overnight_b64 scripts/mac_overnight.sh --status
+```
+
+About 90 h of search (a failing problem now takes about 16 minutes per condition), so about four
+days with pauses for runner jobs; `HOURS=168` stops it after a week in all, and rerunning resumes.
+It needs about 1 GB of disk for the traces. The report at the end gives the budget curve from 12
+to 64 expansions.
 
 ### PutnamBench on the Mac
 
