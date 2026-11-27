@@ -14,7 +14,7 @@
 # interleaved per problem, so whenever it stops, the finished problems are paired.
 #
 # It gives memory back on its own (src/markov_lean/mac_guard.py): when a GitHub runner job
-# starts (a Runner.Worker process), memory pressure reaches "warn", available memory falls
+# starts (a Runner.Worker process), memory pressure reaches "critical", available memory falls
 # under MIN_FREE_GB or swap grows, it stops the search cleanly, which frees its ~9 GB, and
 # starts it again once no job has run for COOLDOWN seconds and RESUME_FREE_GB are free.
 # It changes no system setting and never touches the runner.

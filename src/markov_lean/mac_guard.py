@@ -18,13 +18,20 @@ seconds, looks at:
 Guarded jobs also take turns: a lock file (``--lock``) lets one run at a time, so the
 search and the local judge, which do not fit in 16 GB together, never start side by side.
 
-When a runner job starts, pressure reaches *warn*, available memory falls under
-``--min-free-gb`` or swap grows by more than ``--max-swap-growth-gb``, it stops the job
+When a runner job starts, pressure reaches *critical* (``--max-pressure``), available memory
+falls under ``--min-free-gb`` or swap grows by more than ``--max-swap-growth-gb``, it stops the job
 cleanly (SIGINT, as Ctrl-C would, then SIGTERM and SIGKILL if it hangs), which frees all
 of its memory; pausing a process with SIGSTOP would not. Both jobs it is meant for are
 resumable at the level of one problem or one proof, so a stop loses at most the item in
 flight. Once no runner job has run for ``--cooldown`` seconds, pressure is normal and at
 least ``--resume-free-gb`` is available, it starts the same command again, which resumes.
+
+Pressure *warn* alone does not stop a running job: with the 4-bit prover loaded, a 16 GB Mac sits
+at *warn* with 1.5 to 2 GB available and no swap, which is its steady state, not trouble. Stopping
+there only unloads the model, pressure drops back to normal, the guard starts it again and the
+next load brings *warn* back, so the job loops without progress. A runner job still stops it
+at once, and real trouble shows up as critical pressure, swap growth or ``--min-free-gb``.
+``--max-pressure 1`` brings back the old stop at *warn*.
 
 The guard ends when the job exits 0 on its own (finished, or its own time limit), when
 ``--hours`` have passed, after ``--max-failures`` failed starts in a row, or on Ctrl-C
@@ -151,7 +158,7 @@ class Limits:
     min_free_gb: float = 1.0          # stop the job below this much available memory
     resume_free_gb: float = 10.0      # start (again) only with at least this much available
     max_swap_growth_gb: float = 1.5   # stop the job if swap grew this much since it started
-    max_pressure: int = 1             # stop above this level (2 is warn)
+    max_pressure: int = 2             # stop above this level: 2 (warn) runs on, 4 (critical) stops
     cooldown: float = 120.0           # seconds with no runner job (and room) before starting again
 
 
@@ -423,6 +430,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-free-gb", type=float, default=lim.min_free_gb)
     p.add_argument("--resume-free-gb", type=float, default=lim.resume_free_gb)
     p.add_argument("--max-swap-growth-gb", type=float, default=lim.max_swap_growth_gb)
+    p.add_argument("--max-pressure", type=int, choices=(1, 2), default=lim.max_pressure,
+                   help="stop the running job above this pressure level: 2 (default) stops only at "
+                        "critical, 1 also stops at warn")
     p.add_argument("--cooldown", type=float, default=lim.cooldown, help="seconds of quiet before a restart")
     p.add_argument("--poll", type=float, default=10.0, help="seconds between checks")
     p.add_argument("--grace", type=float, default=120.0, help="seconds to wait after Ctrl-C before SIGTERM")
@@ -456,7 +466,8 @@ def main(argv: list[str] | None = None) -> int:
     # launchd's unload and a closed terminal stop the job cleanly too, instead of orphaning it
     signal.signal(signal.SIGTERM, _as_ctrl_c)
     signal.signal(signal.SIGHUP, _as_ctrl_c)
-    limits = Limits(args.min_free_gb, args.resume_free_gb, args.max_swap_growth_gb, 1, args.cooldown)
+    limits = Limits(args.min_free_gb, args.resume_free_gb, args.max_swap_growth_gb, args.max_pressure,
+                    args.cooldown)
     guard = Guard(cmd, limits, hours=args.hours, hours_flag=args.hours_flag, poll=args.poll, grace=args.grace,
                   max_failures=args.max_failures, on_pause=args.on_pause, state_path=args.state,
                   lock_path=args.lock or None,
